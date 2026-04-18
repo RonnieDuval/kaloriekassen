@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: kaloriekassen
+      POSTGRES_USER: kalorie
+      POSTGRES_PASSWORD: kalorie
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  sync_mfp:
+    build: .
+    command: ["python", "sync_mfp.py"]
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: kaloriekassen
+      DB_USER: kalorie
+      DB_PASSWORD: kalorie
+      MFP_USERNAME: ""
+      MFP_PASSWORD: ""
+    restart: "no"
+
+  sync_intervals:
+    build: .
+    command: ["python", "sync_intervals.py"]
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: kaloriekassen
+      DB_USER: kalorie
+      DB_PASSWORD: kalorie
+      INTERVALS_API_KEY: ""
+      INTERVALS_ATHLETE_ID: ""
+    restart: "no"
+
+  sync_fitbit:
+    build: .
+    command: ["python", "sync_fitbit.py"]
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: kaloriekassen
+      DB_USER: kalorie
+      DB_PASSWORD: kalorie
+      FITBIT_ACCESS_TOKEN: ""
+      FITBIT_USER_ID: "-"
+    restart: "no"
+
+volumes:
+  pgdata:

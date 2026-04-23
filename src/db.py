@@ -3,7 +3,12 @@ import logging
 import os
 
 import psycopg2
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # Optional in test/minimal environments
+    def load_dotenv():
+        return None
 
 # Load environment variables from .env file
 load_dotenv()

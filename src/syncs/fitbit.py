@@ -6,6 +6,7 @@ from typing import Dict, List
 
 import requests
 
+from src.pipeline import normalize_activities
 from src.sync_base import BaseSyncAdapter
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,10 @@ class FitbitSync(BaseSyncAdapter):
 
     table_name = "raw_fitbit"
     columns = ["date", "calories_out", "distance_km", "steps"]
+
+    def __init__(self):
+        super().__init__()
+        self._raw_events: List[Dict] = []
 
     def fetch_data(self) -> List[Dict]:
         """Fetch last 7 days of Fitbit data."""
@@ -38,7 +43,7 @@ class FitbitSync(BaseSyncAdapter):
 
         series = {}
         for metric, url in endpoints.items():
-            logger.debug(f"Fetching Fitbit {metric}...")
+            logger.debug("Fetching Fitbit %s...", metric)
             resp = requests.get(url, headers=headers, timeout=30)
             resp.raise_for_status()
 
@@ -51,6 +56,28 @@ class FitbitSync(BaseSyncAdapter):
                 )
                 for item in resp.json().get(metric_key, [])
             }
+
+        raw_events: List[Dict] = []
+        for offset in range(self.days_back):
+            day = today - dt.timedelta(days=offset)
+            activities_url = f"{base}/activities/date/{day.isoformat()}.json"
+            resp = requests.get(activities_url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            day_payload = resp.json()
+
+            for activity in day_payload.get("activities", []):
+                raw_events.append(
+                    {
+                        "source": "fitbit",
+                        "source_event_type": "activity",
+                        "source_event_id": str(activity.get("logId") or ""),
+                        "event_ts": f"{day.isoformat()}T{activity.get('startTime', '00:00')}",
+                        "event_date": day,
+                        "payload": activity,
+                    }
+                )
+
+        self._raw_events = raw_events
 
         rows: List[Dict] = []
         for offset in range(self.days_back):
@@ -66,3 +93,9 @@ class FitbitSync(BaseSyncAdapter):
 
         logger.info("Fetched %d days from Fitbit", len(rows))
         return rows
+
+    def fetch_raw_events(self) -> List[Dict]:
+        return self._raw_events
+
+    def after_sync(self) -> None:
+        normalize_activities(days_back=self.days_back)

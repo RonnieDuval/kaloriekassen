@@ -24,3 +24,4 @@ sympy==1.14.0
 typing-extensions==4.12.2
 urllib3==2.6.3
 wcwidth==0.6.0
+SQLAlchemy==2.0.44

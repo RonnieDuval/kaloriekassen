@@ -6,6 +6,7 @@ from typing import Dict, List
 
 import requests
 
+from src.pipeline import normalize_activities
 from src.sync_base import BaseSyncAdapter
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,10 @@ class IntervalsSync(BaseSyncAdapter):
 
     table_name = "raw_intervals"
     columns = ["date", "calories_out", "distance_km", "elevation_gain", "workout_type"]
+
+    def __init__(self):
+        super().__init__()
+        self._raw_events: List[Dict] = []
 
     def fetch_data(self) -> List[Dict]:
         """Fetch last 7 days of Intervals.icu activity data, aggregated by day."""
@@ -41,10 +46,25 @@ class IntervalsSync(BaseSyncAdapter):
         resp.raise_for_status()
         activities = resp.json()
 
+        self._raw_events = [
+            {
+                "source": "intervals",
+                "source_event_type": "activity",
+                "source_event_id": str(item.get("id") or ""),
+                "event_ts": item.get("start_date") or item.get("start_date_local"),
+                "event_date": dt.date.fromisoformat(item.get("start_date_local", "")[:10]),
+                "payload": item,
+            }
+            for item in activities
+            if item.get("start_date_local")
+        ]
+
         # Aggregate activities by day
         per_day: Dict[dt.date, Dict] = {}
         for item in activities:
-            day = dt.date.fromisoformat(item.get("start_date_local", "")[:10])
+            if not item.get("start_date_local"):
+                continue
+            day = dt.date.fromisoformat(item["start_date_local"][:10])
             metrics = per_day.setdefault(
                 day,
                 {
@@ -63,7 +83,6 @@ class IntervalsSync(BaseSyncAdapter):
             if workout_type:
                 metrics["workout_type"] = workout_type
 
-        # Build complete 7-day range (fill missing days with zeros)
         rows: List[Dict] = []
         for offset in range(self.days_back):
             day = today - dt.timedelta(days=offset)
@@ -80,5 +99,15 @@ class IntervalsSync(BaseSyncAdapter):
                 )
             )
 
-        logger.info("Fetched %d days from Intervals.icu (aggregated from %d activities)", len(rows), len(activities))
+        logger.info(
+            "Fetched %d days from Intervals.icu (aggregated from %d activities)",
+            len(rows),
+            len(activities),
+        )
         return rows
+
+    def fetch_raw_events(self) -> List[Dict]:
+        return self._raw_events
+
+    def after_sync(self) -> None:
+        normalize_activities(days_back=self.days_back)

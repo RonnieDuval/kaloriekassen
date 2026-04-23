@@ -86,6 +86,8 @@ def test_upsert_rows(mock_get_conn):
     mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
     mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    mock_cursor.connection.encoding = "UTF8"
+    mock_cursor.mogrify.return_value = b"(stub)"
     
     sync = MockSync()
     rows = [
@@ -109,6 +111,8 @@ def test_run_success(mock_get_conn, mock_logger):
     mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
     mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    mock_cursor.connection.encoding = "UTF8"
+    mock_cursor.mogrify.return_value = b"(stub)"
     
     sync = MockSync()
     sync.run()

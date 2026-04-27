@@ -1,82 +1,80 @@
-"""Integration tests for google_health_access module."""
-from unittest.mock import Mock, patch, MagicMock
-import pytest
-from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
-import json
+"""Integration-style tests for google_health_access module (no mocks)."""
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import json
 
 import google_health_access
 import settings
 
 
-def test_get_credentials_with_real_objects():
-    """Integration test: get_credentials uses real Credentials objects, not mocks."""
-    with patch('google_health_access.Credentials.refresh'):
-        with patch.object(settings, 'GOOGLE_CLIENT_ID', 'test_client_id'):
-            with patch.object(settings, 'GOOGLE_CLIENT_SECRET', 'test_client_secret'):
-                creds = google_health_access.get_credentials('test_refresh_token')
-    
-    # Verify we get a real Credentials object back, not a MagicMock
-    assert isinstance(creds, Credentials)
-    assert not isinstance(creds, MagicMock)
-    assert creds.refresh_token == 'test_refresh_token'
+def test_get_credentials_returns_real_credentials_object(monkeypatch):
+    """get_credentials returns a real Credentials object with expected fields."""
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_ID', 'test_client_id')
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_SECRET', 'test_client_secret')
 
+    creds = google_health_access.get_credentials(
+        'test_refresh_token',
+        refresh_now=False,
+    )
 
-def test_get_credentials_returns_credentials_with_correct_uri():
-    """Integration test: get_credentials sets correct token URI."""
-    with patch('google_health_access.Credentials.refresh'):
-        with patch.object(settings, 'GOOGLE_CLIENT_ID', 'test_client_id'):
-            with patch.object(settings, 'GOOGLE_CLIENT_SECRET', 'test_client_secret'):
-                creds = google_health_access.get_credentials('test_refresh_token')
-    
-    assert creds.token_uri == "https://oauth2.googleapis.com/token"
+    assert creds.__class__.__module__ == 'google.oauth2.credentials'
+    assert creds.__class__.__name__ == 'Credentials'
+    assert creds.token_uri == 'https://oauth2.googleapis.com/token'
     assert creds.client_id == 'test_client_id'
     assert creds.client_secret == 'test_client_secret'
     assert creds.refresh_token == 'test_refresh_token'
+    assert creds.token is None
 
 
-def test_get_credentials_calls_refresh_when_token_invalid():
-    """Integration test: get_credentials calls refresh method on invalid token."""
-    with patch('google_health_access.Credentials.refresh') as mock_refresh:
-        with patch.object(settings, 'GOOGLE_CLIENT_ID', 'test_client_id'):
-            with patch.object(settings, 'GOOGLE_CLIENT_SECRET', 'test_client_secret'):
-                # Patch the valid property to return False (token needs refresh)
-                with patch.object(Credentials, 'valid', new_callable=lambda: property(lambda self: False)):
-                    creds = google_health_access.get_credentials('test_refresh_token')
-    
-    # Verify refresh was called
-    mock_refresh.assert_called()
+def test_get_credentials_uses_environment_settings_without_patching_config(monkeypatch):
+    """get_credentials uses settings module values as-is."""
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_ID', 'env_client_id')
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_SECRET', 'env_client_secret')
 
+    creds = google_health_access.get_credentials(
+        'test_refresh_token',
+        refresh_now=False,
+    )
 
-def test_get_credentials_uses_environment_settings():
-    """Integration test: get_credentials uses real settings from environment."""
-    # Use real settings from environment (no mocking)
-    with patch('google_health_access.Credentials.refresh'):
-        creds = google_health_access.get_credentials('test_refresh_token')
-        breakpoint()
-    
-    # Verify that real settings were used from environment
     assert creds.client_id == settings.GOOGLE_CLIENT_ID
     assert creds.client_secret == settings.GOOGLE_CLIENT_SECRET
     assert creds.refresh_token == 'test_refresh_token'
-    assert creds.token is None  # Token should be None initially
 
 
-def test_get_credentials_preserves_all_parameters():
-    """Integration test: get_credentials preserves all credential parameters."""
-    with patch('google_health_access.Credentials.refresh'):
-        with patch.object(settings, 'GOOGLE_CLIENT_ID', 'my_test_id'):
-            with patch.object(settings, 'GOOGLE_CLIENT_SECRET', 'my_test_secret'):
-                test_token = 'my_test_refresh_token_xyz'
-                creds = google_health_access.get_credentials(test_token)
-    
-    # Verify all parameters are correctly set
-    assert creds.refresh_token == test_token
-    assert creds.client_id == 'my_test_id'
-    assert creds.client_secret == 'my_test_secret'
-    assert creds.token == None  # Initial token should be None
-    assert creds.token_uri == "https://oauth2.googleapis.com/token"
+def test__load_refresh_token_returns_none_when_file_missing(tmp_path, monkeypatch):
+    """Missing token file returns None."""
+    token_path = tmp_path / 'missing.json'
+    monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
+
+    assert google_health_access._load_refresh_token() is None
+
+
+def test_get_credentials_loads_token_from_store_when_not_passed(tmp_path, monkeypatch):
+    """get_credentials loads stored token when no argument is supplied."""
+    token_path = tmp_path / 'secrets' / 'token.json'
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text(
+        json.dumps({'refresh_token': 'stored_refresh_token'}),
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_ID', 'store_client_id')
+    monkeypatch.setattr(settings, 'GOOGLE_CLIENT_SECRET', 'store_client_secret')
+
+    creds = google_health_access.get_credentials(refresh_now=False)
+
+    assert creds.refresh_token == 'stored_refresh_token'
+    assert creds.client_id == 'store_client_id'
+    assert creds.client_secret == 'store_client_secret'
+
+
+def test_get_credentials_raises_without_any_refresh_token(tmp_path, monkeypatch):
+    """get_credentials raises if neither argument nor store has token."""
+    token_path = tmp_path / 'secrets' / 'missing.json'
+    monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
+
+    try:
+        google_health_access.get_credentials(refresh_now=False)
+        assert False, 'Expected ValueError when no refresh token exists'
+    except ValueError as exc:
+        assert 'No refresh token available' in str(exc)

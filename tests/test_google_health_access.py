@@ -1,5 +1,7 @@
 """Integration-style tests for google_health_access module (no mocks)."""
 
+import json
+
 import google_health_access
 import settings
 
@@ -38,33 +40,26 @@ def test_get_credentials_uses_environment_settings_without_patching_config(monke
     assert creds.refresh_token == 'test_refresh_token'
 
 
-def test_load_refresh_token_returns_none_when_file_missing(tmp_path, monkeypatch):
+def test__load_refresh_token_returns_none_when_file_missing(tmp_path, monkeypatch):
     """Missing token file returns None."""
     token_path = tmp_path / 'missing.json'
     monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
 
-    assert google_health_access.load_refresh_token() is None
-
-
-def test_save_and_load_refresh_token_roundtrip(tmp_path, monkeypatch):
-    """Saved token can be read back from local store."""
-    token_path = tmp_path / 'secrets' / 'token.json'
-    monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
-
-    google_health_access.save_refresh_token('abc123')
-
-    assert token_path.exists()
-    assert google_health_access.load_refresh_token() == 'abc123'
+    assert google_health_access._load_refresh_token() is None
 
 
 def test_get_credentials_loads_token_from_store_when_not_passed(tmp_path, monkeypatch):
     """get_credentials loads stored token when no argument is supplied."""
     token_path = tmp_path / 'secrets' / 'token.json'
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text(
+        json.dumps({'refresh_token': 'stored_refresh_token'}),
+        encoding='utf-8',
+    )
+
     monkeypatch.setattr(settings, 'GOOGLE_TOKEN_STORE_PATH', str(token_path))
     monkeypatch.setattr(settings, 'GOOGLE_CLIENT_ID', 'store_client_id')
     monkeypatch.setattr(settings, 'GOOGLE_CLIENT_SECRET', 'store_client_secret')
-
-    google_health_access.save_refresh_token('stored_refresh_token')
 
     creds = google_health_access.get_credentials(refresh_now=False)
 

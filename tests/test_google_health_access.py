@@ -2,7 +2,7 @@
 
 import json
 
-import google_health_access
+import GOOGLE_HEALTH_API.google_health_access as google_health_access
 import settings
 
 

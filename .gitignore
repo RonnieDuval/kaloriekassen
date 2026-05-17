@@ -5,3 +5,5 @@ __pycache__/
 
 
 secrets/
+*.html
+temp_chrome_profile/

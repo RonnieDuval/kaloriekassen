@@ -3,14 +3,12 @@
 import sys
 from src.logging_config import setup_logging
 from src.syncs.fitbit import FitbitSync
-from src.syncs.mfp import MFPSync
 from src.syncs.intervals import IntervalsSync
 
 logger = setup_logging(__name__)
 
 SYNCS = {
     "fitbit": FitbitSync,
-    "mfp": MFPSync,
     "intervals": IntervalsSync,
 }
 
@@ -60,10 +58,9 @@ def main():
     elif len(sys.argv) == 2:
         return run_single(sys.argv[1])
     else:
-        print("Usage: python run_sync.py [all|fitbit|mfp|intervals]")
+        print("Usage: python run_sync.py [all|fitbit|intervals]")
         print("  all (default) - run all syncs")
         print("  fitbit        - run Fitbit sync only")
-        print("  mfp           - run MyFitnessPal sync only")
         print("  intervals     - run Intervals.icu sync only")
         return 1
 

@@ -15,6 +15,7 @@ psycopg2-binary==2.9.11
 pycryptodomex==3.23.0
 pygments==2.20.0
 pyparsing==3.3.2
+python-dotenv==1.2.2
 python-dateutil==2.9.0.post0
 requests==2.33.1
 requests-toolbelt==1.0.0

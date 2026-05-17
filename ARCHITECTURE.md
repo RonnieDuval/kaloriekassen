@@ -1,116 +1,126 @@
-# Kaloriekassen — Refactored Architecture
+# Kaloriekassen — Architecture
 
-## New Structure
+## Current Structure
 
-```
+```text
 kaloriekassen/
 ├── src/                          # Main package
 │   ├── __init__.py
-│   ├── db.py                     # Database utilities (connection pooling)
+│   ├── db.py                     # Database utilities
 │   ├── logging_config.py         # Centralized logging setup
-│   ├── sync_base.py              # Abstract base class for all syncs
-│   └── syncs/                    # Concrete sync implementations
+│   ├── sync_base.py              # Abstract base class for DB-backed syncs
+│   └── syncs/                    # DB-backed sync implementations
 │       ├── __init__.py
 │       ├── fitbit.py             # FitbitSync class
-│       ├── mfp.py                # MFPSync class
 │       └── intervals.py          # IntervalsSync class
-├── sync_fitbit.py                # Entry point (kept for docker-compose compatibility)
-├── sync_mfp.py                   # Entry point
-├── sync_intervals.py             # Entry point
-├── run_sync.py                   # CLI runner for all/individual syncs
+├── MYFITNESSPAL/
+│   └── hent_mfp_data.py          # Cookie-based MyFitnessPal nutrition fetch spike
+├── sync_fitbit.py                # Fitbit entry point
+├── sync_intervals.py             # Intervals.icu entry point
+├── run_sync.py                   # CLI runner for DB-backed syncs
 ├── requirements.txt              # Dependencies
 ├── Dockerfile
 ├── docker-compose.yml
-└── init.sql                      # Database schema
+└── init.sql                      # Database schema, including raw_mfp for future MFP writes
 ```
 
-## Key Improvements
+## Key Principles
 
-### 1. **Eliminated Code Duplication**
-- **Before**: `get_db_conn()`, logging setup, and upsert logic repeated in all 3 files (~200 lines of duplication)
-- **After**: Centralized in `BaseSyncAdapter` and utility modules
+### 1. Shared DB sync infrastructure
 
-### 2. **Abstraction Layer**
-- All syncs inherit from `BaseSyncAdapter`
-- Only override `fetch_data()` method — sync-specific logic only
-- Common pattern: fetch → upsert → log
+Fitbit and Intervals.icu inherit from `BaseSyncAdapter` and use the common
+fetch → upsert → log pattern.
 
-### 3. **Easy to Add New Data Sources**
+### 2. MyFitnessPal is moving to cookie-based fetching
+
+The old username/password based MyFitnessPal sync has been removed. The current
+MyFitnessPal work lives in `MYFITNESSPAL/hent_mfp_data.py`, which uses the
+`python-myfitnesspal` package's cookie handling by default. For Docker/non-browser
+runs, optional `MFP_COOKIE_B` and `MFP_COOKIE_SESSION` values can be adapted into
+the CookieJar shape accepted by `myfitnesspal.Client(cookiejar=...)`.
+
+The next step is to validate the cookie-based fetch before wiring it back into
+PostgreSQL writes.
+
+### 3. Easy to Add New DB-backed Data Sources
+
 ```python
 class StravaSync(BaseSyncAdapter):
     table_name = "raw_strava"
     columns = ["date", "calories_out", "distance_km"]
-    
+
     def fetch_data(self) -> List[Dict]:
         # Only Strava-specific logic here
         pass
 ```
-Then it automatically works with the rest of the infrastructure.
 
-### 4. **Better Error Handling**
-- Centralized exception logging
-- Clear error messages with context
-
-### 5. **Better Logging**
-- Consistent format across all syncs
-- Easier to debug with structured logging
+Then it automatically works with the common DB upsert flow.
 
 ## Usage
 
-### Individual Entry Points (for docker-compose)
+### Individual DB-backed entry points
+
 ```bash
 python sync_fitbit.py
-python sync_mfp.py
 python sync_intervals.py
 ```
 
 ### CLI Runner
+
 ```bash
-python run_sync.py              # Run all syncs
+python run_sync.py              # Run DB-backed syncs
 python run_sync.py fitbit       # Run Fitbit only
-python run_sync.py mfp          # Run MyFitnessPal only
 python run_sync.py intervals    # Run Intervals.icu only
+```
+
+### MyFitnessPal cookie fetch
+
+```bash
+python MYFITNESSPAL/hent_mfp_data.py
+```
+
+Optional Docker/non-browser cookie injection:
+
+```env
+MFP_COOKIE_B=...
+MFP_COOKIE_SESSION=...
 ```
 
 ## File Responsibilities
 
 | File | Purpose |
 |------|---------|
-| `src/db.py` | Database connection (singleton-ready for future optimization) |
+| `src/db.py` | Database connection |
 | `src/logging_config.py` | Centralized logging configuration |
-| `src/sync_base.py` | Abstract base class with common sync logic |
+| `src/sync_base.py` | Abstract base class with common DB sync logic |
 | `src/syncs/fitbit.py` | FitbitSync implementation |
-| `src/syncs/mfp.py` | MFPSync implementation |
-| `src/syncs/intervals.py` | IntervalsSync implementation |
-| `sync_*.py` | Thin entry points for docker-compose |
-| `run_sync.py` | CLI orchestrator for running syncs |
+| `src/syncs/intervals.py` | Intervals.icu sync implementation |
+| `MYFITNESSPAL/hent_mfp_data.py` | Cookie-based MyFitnessPal nutrition fetch |
+| `sync_fitbit.py` / `sync_intervals.py` | Thin entry points for DB-backed syncs |
+| `run_sync.py` | CLI orchestrator for DB-backed syncs |
 
-## Future Improvements (Ready to Implement)
+## Future Improvements
 
-1. **Connection Pooling** (`src/db.py`)
-   - Add pgbouncer or psycopg2 connection pool
+1. **Wire MyFitnessPal into database writes**
+   - Reuse the cookie-based payload once fetch stability is confirmed.
+   - Write to the existing `raw_mfp` table.
 
-2. **Retry Logic** (`src/sync_base.py`)
-   - Exponential backoff for failed API calls
-   - Partial success handling
+2. **Connection Pooling** (`src/db.py`)
+   - Add pgbouncer or psycopg2 connection pool.
 
-3. **Scheduling** (`src/scheduler.py`)
-   - APScheduler or Cron integration
-   - Replace `restart: "no"` with persistent service
+3. **Retry Logic** (`src/sync_base.py`)
+   - Exponential backoff for failed API calls.
+   - Partial success handling.
 
-4. **Type Validation** (`src/validators.py`)
-   - Pydantic models for data validation
-   - Catch invalid data before DB insert
+4. **Scheduling** (`src/scheduler.py`)
+   - APScheduler or Cron integration.
+   - Replace `restart: "no"` with persistent services.
 
-5. **Testing Framework** (`tests/`)
-   - Mock APIs for unit tests
-   - Integration tests with test database
+5. **Type Validation** (`src/validators.py`)
+   - Pydantic models for data validation.
+   - Catch invalid data before DB insert.
 
 6. **Metrics & Monitoring** (`src/metrics.py`)
-   - Track sync success/failure rates
-   - API response times
-   - Rows synced per source
-
-## Backward Compatibility
-
-✅ **No breaking changes**: `docker-compose.yml` works as-is since root-level `sync_*.py` files are maintained as thin entry points.
+   - Track sync success/failure rates.
+   - API response times.
+   - Rows synced per source.

@@ -16,6 +16,27 @@ docker compose up --build
 
 Sæt credentials i `docker-compose.yml` eller via miljøvariabler.
 
+## MyFitnessPal cookie setup
+
+MyFitnessPal hentes nu via `myfitnesspal`-pakkens cookie-håndtering i stedet for username/password.
+Det nye cookie-baserede spike ligger i `MYFITNESSPAL/hent_mfp_data.py` og henter et rent nutrition-payload for én dag.
+
+Som default bruger `myfitnesspal.Client()` pakkens egen browser-cookie integration. I Docker/non-browser miljøer kan du stadig injicere cookies via `.env`:
+
+```env
+MFP_COOKIE_B=din_b_cookie
+MFP_COOKIE_SESSION=din_user_session_cookie
+```
+
+Kør et manuelt tjek med:
+
+```bash
+python MYFITNESSPAL/hent_mfp_data.py
+```
+
+Hvis MyFitnessPal svarer med login-fejl, er cookies typisk udløbet og skal opdateres.
+Cookie-værdierne er secrets på linje med passwords og må ikke committes.
+
 ## Google Health OAuth setup
 
 Google Health setup er et **interaktivt engangs-flow**. Scriptet åbner Google-login i browseren, du godkender adgangen, og derefter kopierer du `code`-parameteren fra redirect URL'en tilbage i terminalen.

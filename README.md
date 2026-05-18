@@ -16,26 +16,41 @@ docker compose up --build
 
 Sæt credentials i `docker-compose.yml` eller via miljøvariabler.
 
-## MyFitnessPal cookie setup
+## MyFitnessPal - Browser automation via Playwright
 
-MyFitnessPal hentes nu via `myfitnesspal`-pakkens cookie-håndtering i stedet for username/password.
-Det nye cookie-baserede spike ligger i `MYFITNESSPAL/hent_mfp_data.py` og henter et rent nutrition-payload for én dag.
+MyFitnessPal-data hentes via Playwright-baseret browser automation. Scriptet kopier din lokale Chrome-profil og bruger den til at logge ind automatisk.
 
-Som default bruger `myfitnesspal.Client()` pakkens egen browser-cookie integration. I Docker/non-browser miljøer kan du stadig injicere cookies via `.env`:
+### Setup
 
-```env
-MFP_COOKIE_B=din_b_cookie
-MFP_COOKIE_SESSION=din_user_session_cookie
-```
+Sørg for at Chrome er installeret lokalt. Skriptet finder den automatisk fra `~/.config/google-chrome`.
 
-Kør et manuelt tjek med:
+### Brug
+
+Hent data for en enkelt dag:
 
 ```bash
-python MYFITNESSPAL/hent_mfp_data.py
+python MYFITNESSPAL/mfp_chatgpt.py 2026-05-13
 ```
 
-Hvis MyFitnessPal svarer med login-fejl, er cookies typisk udløbet og skal opdateres.
-Cookie-værdierne er secrets på linje med passwords og må ikke committes.
+Hent data for en periode:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --from 2026-05-01
+```
+
+Hent data for de seneste 7 dage:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --last-week
+```
+
+Hvis du skal logge ind manuelt, kør med `--visible`:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --visible 2026-05-13
+```
+
+Browseren åbnes, og du kan logge ind manuelt. Derefter henter scriptet data. Din session gemmes i `temp_chrome_profile/`, så senere kald er automatiske.
 
 ## Google Health OAuth setup
 

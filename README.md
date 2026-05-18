@@ -16,6 +16,42 @@ docker compose up --build
 
 Sæt credentials i `docker-compose.yml` eller via miljøvariabler.
 
+## MyFitnessPal - Browser automation via Playwright
+
+MyFitnessPal-data hentes via Playwright-baseret browser automation. Scriptet kopier din lokale Chrome-profil og bruger den til at logge ind automatisk.
+
+### Setup
+
+Sørg for at Chrome er installeret lokalt. Skriptet finder den automatisk fra `~/.config/google-chrome`.
+
+### Brug
+
+Hent data for en enkelt dag:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py 2026-05-13
+```
+
+Hent data for en periode:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --from 2026-05-01
+```
+
+Hent data for de seneste 7 dage:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --last-week
+```
+
+Hvis du skal logge ind manuelt, kør med `--visible`:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --visible 2026-05-13
+```
+
+Browseren åbnes, og du kan logge ind manuelt. Derefter henter scriptet data. Din session gemmes i `temp_chrome_profile/`, så senere kald er automatiske.
+
 ## Google Health OAuth setup
 
 Google Health setup er et **interaktivt engangs-flow**. Scriptet åbner Google-login i browseren, du godkender adgangen, og derefter kopierer du `code`-parameteren fra redirect URL'en tilbage i terminalen.

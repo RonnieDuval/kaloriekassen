@@ -1,116 +1,198 @@
-# Kaloriekassen — Refactored Architecture
+# Kaloriekassen — Architecture
 
-## New Structure
+## Current Structure
 
-```
+```text
 kaloriekassen/
 ├── src/                          # Main package
 │   ├── __init__.py
-│   ├── db.py                     # Database utilities (connection pooling)
+│   ├── db.py                     # Database utilities
 │   ├── logging_config.py         # Centralized logging setup
-│   ├── sync_base.py              # Abstract base class for all syncs
-│   └── syncs/                    # Concrete sync implementations
+│   ├── sync_base.py              # Abstract base class for DB-backed syncs
+│   └── syncs/                    # DB-backed sync implementations
 │       ├── __init__.py
-│       ├── fitbit.py             # FitbitSync class
-│       ├── mfp.py                # MFPSync class
-│       └── intervals.py          # IntervalsSync class
-├── sync_fitbit.py                # Entry point (kept for docker-compose compatibility)
-├── sync_mfp.py                   # Entry point
-├── sync_intervals.py             # Entry point
-├── run_sync.py                   # CLI runner for all/individual syncs
+│       ├── fitbit.py             # FitbitSync class (→ raw_fitbit)
+│       └── intervals.py          # IntervalsSync class (→ raw_intervals)
+├── GOOGLE_HEALTH_API/            # Google Health API integration
+│   ├── setup_google_health.py    # OAuth setup & refresh token management
+│   └── google_health_access.py   # Credential helpers & API client
+├── INTERVALS_ICU/                # Intervals.icu data fetcher
+│   └── hent_intervals_icu.py     # CSV-based activity fetch
+├── MYFITNESSPAL/                 # MyFitnessPal data fetcher
+│   └── mfp_chatgpt.py            # Playwright browser automation
+├── sync_fitbit.py                # Fitbit entry point
+├── sync_intervals.py             # Intervals.icu entry point
+├── run_sync.py                   # CLI runner for DB-backed syncs
 ├── requirements.txt              # Dependencies
 ├── Dockerfile
 ├── docker-compose.yml
-└── init.sql                      # Database schema
+└── init.sql                      # Database schema (raw_mfp, raw_intervals, raw_fitbit)
 ```
 
-## Key Improvements
+## Key Principles
 
-### 1. **Eliminated Code Duplication**
-- **Before**: `get_db_conn()`, logging setup, and upsert logic repeated in all 3 files (~200 lines of duplication)
-- **After**: Centralized in `BaseSyncAdapter` and utility modules
+### 1. Shared DB sync infrastructure
 
-### 2. **Abstraction Layer**
-- All syncs inherit from `BaseSyncAdapter`
-- Only override `fetch_data()` method — sync-specific logic only
-- Common pattern: fetch → upsert → log
+Fitbit and Intervals.icu inherit from `BaseSyncAdapter` and use the common
+fetch → upsert → log pattern. Each source writes to its own raw table:
+- `raw_fitbit` (Fitbit data)
+- `raw_intervals` (Intervals.icu data)
+- `raw_mfp` (MyFitnessPal data)
 
-### 3. **Easy to Add New Data Sources**
+### 2. MyFitnessPal uses Playwright browser automation
+
+MyFitnessPal data is fetched via `MYFITNESSPAL/mfp_chatgpt.py` using Playwright
+to automate browser login and data extraction. The script:
+- Copies the local Chrome profile to avoid repeated logins
+- Extracts nutrition data (meals, calories, macros) from the food diary
+- Supports fetching single days, date ranges, or recent weeks
+- Runs with `--visible` flag for manual login if needed
+
+The next step is to wire the fetched data back into PostgreSQL (`raw_mfp` table)
+and integrate it with the sync pipeline.
+
+### 3. Google Health API integration (in progress)
+
+`GOOGLE_HEALTH_API/` handles OAuth setup and credential management:
+- `setup_google_health.py` — Interactive OAuth flow to obtain & store refresh token
+- `google_health_access.py` — Credential helpers to refresh access tokens on demand
+
+**Status:** Infrastructure is in place. The plan is to:
+1. Decide on data flow direction (pull from Google Health vs. push to Google Health)
+2. Build fetcher or writer module to handle actual data transfer
+3. Integrate with the database sync pipeline
+
+### 4. Easy to Add New DB-backed Data Sources
+
 ```python
 class StravaSync(BaseSyncAdapter):
     table_name = "raw_strava"
     columns = ["date", "calories_out", "distance_km"]
-    
+
     def fetch_data(self) -> List[Dict]:
         # Only Strava-specific logic here
         pass
 ```
-Then it automatically works with the rest of the infrastructure.
 
-### 4. **Better Error Handling**
-- Centralized exception logging
-- Clear error messages with context
-
-### 5. **Better Logging**
-- Consistent format across all syncs
-- Easier to debug with structured logging
+Then it automatically works with the common DB upsert flow.
 
 ## Usage
 
-### Individual Entry Points (for docker-compose)
+### Run all DB-backed syncs (Fitbit + Intervals)
+
+```bash
+python run_sync.py
+```
+
+### Run individual syncs
+
+```bash
+python run_sync.py fitbit       # Fitbit only
+python run_sync.py intervals    # Intervals.icu only
+```
+
+Or use direct entry points:
+
 ```bash
 python sync_fitbit.py
-python sync_mfp.py
 python sync_intervals.py
 ```
 
-### CLI Runner
+### MyFitnessPal browser automation
+
+Fetch data for a single day:
+
 ```bash
-python run_sync.py              # Run all syncs
-python run_sync.py fitbit       # Run Fitbit only
-python run_sync.py mfp          # Run MyFitnessPal only
-python run_sync.py intervals    # Run Intervals.icu only
+python MYFITNESSPAL/mfp_chatgpt.py 2026-05-13
+```
+
+Fetch a date range:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --from 2026-05-01
+```
+
+Fetch the last 7 days:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --last-week
+```
+
+Open browser for manual login:
+
+```bash
+python MYFITNESSPAL/mfp_chatgpt.py --visible 2026-05-13
+```
+
+### Google Health API setup (one-time)
+
+```bash
+python GOOGLE_HEALTH_API/setup_google_health.py
+```
+
+This opens your browser for Google login, you grant permission, and the refresh
+token is saved to `secrets/google_oauth_token.json`. Future calls can use:
+
+```python
+from GOOGLE_HEALTH_API.google_health_access import get_credentials
+
+creds = get_credentials()  # Automatically refreshes if needed
 ```
 
 ## File Responsibilities
 
 | File | Purpose |
 |------|---------|
-| `src/db.py` | Database connection (singleton-ready for future optimization) |
+| `src/db.py` | Database connection & utilities |
 | `src/logging_config.py` | Centralized logging configuration |
-| `src/sync_base.py` | Abstract base class with common sync logic |
-| `src/syncs/fitbit.py` | FitbitSync implementation |
-| `src/syncs/mfp.py` | MFPSync implementation |
-| `src/syncs/intervals.py` | IntervalsSync implementation |
-| `sync_*.py` | Thin entry points for docker-compose |
-| `run_sync.py` | CLI orchestrator for running syncs |
+| `src/sync_base.py` | Abstract base class with common DB sync logic |
+| `src/syncs/fitbit.py` | FitbitSync implementation → `raw_fitbit` |
+| `src/syncs/intervals.py` | IntervalsSync implementation → `raw_intervals` |
+| `GOOGLE_HEALTH_API/setup_google_health.py` | OAuth flow & token setup |
+| `GOOGLE_HEALTH_API/google_health_access.py` | Credential management & token refresh |
+| `INTERVALS_ICU/hent_intervals_icu.py` | CSV fetch from Intervals.icu API |
+| `MYFITNESSPAL/mfp_chatgpt.py` | Playwright browser automation for MyFitnessPal |
+| `sync_fitbit.py` / `sync_intervals.py` | Thin entry points for DB-backed syncs |
+| `run_sync.py` | CLI orchestrator for DB-backed syncs |
 
-## Future Improvements (Ready to Implement)
+## Future Improvements
 
-1. **Connection Pooling** (`src/db.py`)
+### High Priority
+
+1. **Wire MyFitnessPal into database writes**
+   - Complete Playwright payload integration
+   - Write to `raw_mfp` table via sync pipeline
+   - Validate data quality before insertion
+
+2. **Google Health API integration**
+   - Decide on data flow direction:
+     - **Pull**: Fetch workouts/activities from Google Health into `raw_google_health` table
+     - **Push**: Send synced nutrition/activity data back to Google Health
+   - Build fetcher or writer module
+   - Integrate with existing sync pipeline
+   - Handle API rate limits & error states
+
+### Medium Priority
+
+3. **Connection Pooling** (`src/db.py`)
    - Add pgbouncer or psycopg2 connection pool
+   - Reduce connection overhead for frequent syncs
 
-2. **Retry Logic** (`src/sync_base.py`)
+4. **Retry Logic** (`src/sync_base.py`)
    - Exponential backoff for failed API calls
    - Partial success handling
 
-3. **Scheduling** (`src/scheduler.py`)
+5. **Scheduling** (`src/scheduler.py`)
    - APScheduler or Cron integration
-   - Replace `restart: "no"` with persistent service
+   - Replace `restart: "no"` with persistent services
 
-4. **Type Validation** (`src/validators.py`)
+### Low Priority
+
+6. **Type Validation** (`src/validators.py`)
    - Pydantic models for data validation
    - Catch invalid data before DB insert
 
-5. **Testing Framework** (`tests/`)
-   - Mock APIs for unit tests
-   - Integration tests with test database
-
-6. **Metrics & Monitoring** (`src/metrics.py`)
+7. **Metrics & Monitoring** (`src/metrics.py`)
    - Track sync success/failure rates
    - API response times
    - Rows synced per source
-
-## Backward Compatibility
-
-✅ **No breaking changes**: `docker-compose.yml` works as-is since root-level `sync_*.py` files are maintained as thin entry points.

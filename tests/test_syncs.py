@@ -1,9 +1,7 @@
 """Tests for individual sync adapters."""
-import datetime as dt
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from src.syncs.fitbit import FitbitSync
-from src.syncs.mfp import MFPSync
 from src.syncs.intervals import IntervalsSync
 
 
@@ -14,16 +12,6 @@ def test_fitbit_sync_config():
     assert "calories_out" in sync.columns
     assert "steps" in sync.columns
     assert "distance_km" in sync.columns
-
-
-def test_mfp_sync_config():
-    """Test MFPSync has correct configuration."""
-    sync = MFPSync()
-    assert sync.table_name == "raw_mfp"
-    assert "calories_in" in sync.columns
-    assert "protein" in sync.columns
-    assert "carbs" in sync.columns
-    assert "fat" in sync.columns
 
 
 def test_intervals_sync_config():
@@ -47,17 +35,6 @@ def test_fitbit_missing_token():
         assert "FITBIT_ACCESS_TOKEN" in str(e)
 
 
-@patch.dict('os.environ', {'MFP_USERNAME': '', 'MFP_PASSWORD': 'test'})
-def test_mfp_missing_credentials():
-    """Test MFPSync raises error when credentials missing."""
-    sync = MFPSync()
-    try:
-        sync.fetch_data()
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "MFP_USERNAME or MFP_PASSWORD" in str(e)
-
-
 @patch.dict('os.environ', {'INTERVALS_API_KEY': '', 'INTERVALS_ATHLETE_ID': 'test'})
 def test_intervals_missing_key():
     """Test IntervalsSync raises error when API key missing."""
@@ -74,10 +51,8 @@ if __name__ == "__main__":
     
     tests = [
         test_fitbit_sync_config,
-        test_mfp_sync_config,
         test_intervals_sync_config,
         test_fitbit_missing_token,
-        test_mfp_missing_credentials,
         test_intervals_missing_key,
     ]
     

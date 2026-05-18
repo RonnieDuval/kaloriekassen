@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests-toolbelt>=1.0.0",
     "rich>=12.6.0",
+    "ruff>=0.15.13",
 ]
 
 [tool.pytest.ini_options]

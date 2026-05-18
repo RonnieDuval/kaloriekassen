@@ -2,6 +2,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+import datetime as dt
 
 from playwright.sync_api import sync_playwright
 
@@ -197,12 +198,57 @@ def hent_mfp_dag(dato_streng="2026-05-13", visible=False):
             context.close()
 
 
+def dato_interval(start_dato: dt.date, slut_dato: dt.date):
+    dato = start_dato
+
+    while dato <= slut_dato:
+        yield dato
+        dato += dt.timedelta(days=1)
+
+
+def hent_mfp_interval(start_dato: str, slut_dato: str | None = None, visible=False):
+    start = dt.date.fromisoformat(start_dato)
+    slut = dt.date.fromisoformat(slut_dato) if slut_dato else dt.date.today()
+
+    resultater = []
+
+    for dato in dato_interval(start, slut):
+        dato_streng = dato.isoformat()
+        print(f"Henter MFP for {dato_streng}")
+
+        data = hent_mfp_dag(dato_streng, visible=visible)
+
+        if data is not None:
+            resultater.append(data)
+
+    return resultater
+
+
+def hent_mfp_seneste_dage(antal_dage=7, visible=False):
+    slut = dt.date.today()
+    start = slut - dt.timedelta(days=antal_dage - 1)
+
+    return hent_mfp_interval(
+        start.isoformat(),
+        slut.isoformat(),
+        visible=visible,
+    )
+
 if __name__ == "__main__":
     visible = "--visible" in sys.argv
-    datoer = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
-    dato = datoer[0] if datoer else "2026-05-13"
 
-    data = hent_mfp_dag(dato, visible=visible)
+    if "--last-week" in sys.argv:
+        data = hent_mfp_seneste_dage(7, visible=visible)
+
+    elif "--from" in sys.argv:
+        start_index = sys.argv.index("--from") + 1
+        start_dato = sys.argv[start_index]
+        data = hent_mfp_interval(start_dato, visible=visible)
+
+    else:
+        datoer = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+        dato = datoer[0] if datoer else dt.date.today().isoformat()
+        data = hent_mfp_dag(dato, visible=visible)
 
     print("\nResultat:")
     print(data)

@@ -1,9 +1,13 @@
 CREATE TABLE IF NOT EXISTS raw_mfp (
     date DATE PRIMARY KEY,
-    calories_in INT,
-    protein INT,
-    carbs INT,
-    fat INT,
+    meals_detail JSONB NOT NULL,
+    calories_in INTEGER,
+    protein NUMERIC,
+    carbs NUMERIC,
+    fat NUMERIC,
+    sodium NUMERIC,
+    sugar NUMERIC,
+    fetched_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

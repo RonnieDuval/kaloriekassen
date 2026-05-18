@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: kaloriekassen
-      POSTGRES_USER: kalorie
-      POSTGRES_PASSWORD: kalorie
+      POSTGRES_DB: ${DB_NAME:-kaloriekassen}
+      POSTGRES_USER: ${DB_USER:-kalorie}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-kalorie}
     ports:
       - "5432:5432"
     volumes:
@@ -13,32 +13,27 @@ services:
 
   sync_intervals:
     build: .
-    command: ["python", "sync_intervals.py"]
+    command: ["python", "run_sync.py", "intervals"]
     depends_on:
       - db
+    env_file:
+      - .env
     environment:
       DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: kaloriekassen
-      DB_USER: kalorie
-      DB_PASSWORD: kalorie
-      INTERVALS_API_KEY: ""
-      INTERVALS_ATHLETE_ID: ""
     restart: "no"
 
-  sync_fitbit:
+  sync_myfitnesspal:
     build: .
-    command: ["python", "sync_fitbit.py"]
+    command: ["python", "run_sync.py", "myfitnesspal"]
     depends_on:
       - db
+    env_file:
+      - .env
     environment:
       DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: kaloriekassen
-      DB_USER: kalorie
-      DB_PASSWORD: kalorie
-      FITBIT_ACCESS_TOKEN: ""
-      FITBIT_USER_ID: "-"
+    volumes:
+      - ${HOME}/.config/google-chrome:/root/.config/google-chrome:ro
+      - ./temp_chrome_profile:/app/temp_chrome_profile
     restart: "no"
 
 volumes:

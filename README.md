@@ -98,7 +98,7 @@ Scriptet gør følgende uden at ændre på OAuth-logikken:
 Eksempel på redirect URL:
 
 ```text
-https://www.google.com/?code=4/0Ab...xyz&scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
+https://www.google.com/?code=4/0Ab...xyz&scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness
 ```
 
 I eksemplet skal du kopiere værdien mellem `code=` og `&scope`.

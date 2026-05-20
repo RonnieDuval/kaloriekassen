@@ -48,6 +48,17 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
             days_back: Number of days to fetch and upload (default 7)
         """
         self.days_back = days_back
+        
+        # Ensure activities column exists for backwards compatibility
+        from src.db import get_db_connection
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("ALTER TABLE raw_intervals ADD COLUMN IF NOT EXISTS activities JSONB;")
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Could not automatically add 'activities' column to 'raw_intervals' table: {e}")
+            
         super().__init__()
         self.access_token = None
         self.refresh_token = None
@@ -76,7 +87,7 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT date, calories_out, distance_km, elevation_gain, workout_type, elapsed_time
+                    SELECT date, calories_out, distance_km, elevation_gain, workout_type, elapsed_time, activities
                     FROM raw_intervals
                     WHERE date >= (CURRENT_DATE - INTERVAL %s)
                     ORDER BY date DESC
@@ -94,6 +105,7 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
                 "elevation_gain": row[3],
                 "workout_type": row[4],
                 "elapsed_time": row[5],
+                "activities": row[6],
             }
             for row in rows
         ]

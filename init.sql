@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS raw_intervals (
     elevation_gain INT,
     workout_type TEXT,
     elapsed_time INT,
+    activities JSONB,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

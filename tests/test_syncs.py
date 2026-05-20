@@ -14,7 +14,8 @@ def test_fitbit_sync_config():
     assert "distance_km" in sync.columns
 
 
-def test_intervals_sync_config():
+@patch('src.syncs.intervals.get_db_connection')
+def test_intervals_sync_config(mock_get_conn):
     """Test IntervalsSync has correct configuration."""
     sync = IntervalsSync()
     assert sync.table_name == "raw_intervals"
@@ -35,11 +36,12 @@ def test_fitbit_missing_token():
         assert "FITBIT_ACCESS_TOKEN" in str(e)
 
 
+@patch('src.syncs.intervals.get_db_connection')
 @patch.dict('os.environ', {'INTERVALS_API_KEY': '', 'INTERVALS_ATHLETE_ID': 'test'})
-def test_intervals_missing_key():
+def test_intervals_missing_key(mock_get_conn):
     """Test IntervalsSync raises error when API key missing."""
-    sync = IntervalsSync()
     try:
+        sync = IntervalsSync()
         sync.fetch_data()
         assert False, "Should have raised ValueError"
     except ValueError as e:

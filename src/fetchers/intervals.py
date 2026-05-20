@@ -1,5 +1,6 @@
 """Intervals.icu data fetcher."""
 import datetime as dt
+import json
 import logging
 import os
 from typing import Dict, List
@@ -64,11 +65,14 @@ class IntervalsFetcher:
             - elevation_gain (int)
             - workout_type (str or None)
             - elapsed_time (int)
+            - activities (str/JSONB representation of raw list)
         """
         activities = self.fetch_raw()
 
-        # Aggregate activities by day
+        # Aggregate activities by day and keep track of individual raw activities
         per_day: Dict[dt.date, Dict] = {}
+        day_activities: Dict[dt.date, List[Dict]] = {}
+        
         for item in activities:
             day = dt.date.fromisoformat(item.get("start_date_local", "")[:10])
             metrics = per_day.setdefault(
@@ -82,6 +86,8 @@ class IntervalsFetcher:
                     "elapsed_time": 0,
                 },
             )
+            day_activities.setdefault(day, []).append(item)
+            
             metrics["calories_out"] += int(item.get("calories", 0) or 0)
             metrics["distance_km"] += float(item.get("distance", 0) or 0) / 1000
             metrics["elevation_gain"] += int(item.get("total_elevation_gain", 0) or 0)
@@ -95,9 +101,12 @@ class IntervalsFetcher:
         rows: List[Dict] = []
         for offset in range(self.days_back):
             day = today - dt.timedelta(days=offset)
-            rows.append(
-                per_day.get(
-                    day,
+            if day in per_day:
+                row = per_day[day]
+                row["activities"] = json.dumps(day_activities.get(day, []))
+                rows.append(row)
+            else:
+                rows.append(
                     {
                         "date": day,
                         "calories_out": 0,
@@ -105,9 +114,9 @@ class IntervalsFetcher:
                         "elevation_gain": 0,
                         "workout_type": None,
                         "elapsed_time": 0,
-                    },
+                        "activities": json.dumps([]),
+                    }
                 )
-            )
 
         logger.info("Aggregated %d days from %d activities", len(rows), len(activities))
         return rows

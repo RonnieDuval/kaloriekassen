@@ -4,6 +4,8 @@ from typing import Dict, List
 
 from src.sync_base import BaseSyncAdapter
 from src.fetchers.intervals import IntervalsFetcher
+from src.db import get_db_connection
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class IntervalsSync(BaseSyncAdapter):
     """
 
     table_name = "raw_intervals"
-    columns = ["date", "calories_out", "distance_km", "elevation_gain", "workout_type", "elapsed_time"]
+    columns = ["date", "calories_out", "distance_km", "elevation_gain", "workout_type", "elapsed_time", "activities"]
 
     def __init__(self, days_back: int = 7):
         """
@@ -36,6 +38,16 @@ class IntervalsSync(BaseSyncAdapter):
         """
         self.days_back = days_back
         self.fetcher = IntervalsFetcher(days_back=days_back)
+        
+        # Ensure activities column exists in the database
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("ALTER TABLE raw_intervals ADD COLUMN IF NOT EXISTS activities JSONB;")
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Could not automatically add 'activities' column to 'raw_intervals' table: {e}")
+            
         super().__init__()
 
     def fetch_data(self) -> List[Dict]:

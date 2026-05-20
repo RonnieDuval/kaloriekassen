@@ -1,10 +1,7 @@
 """Intervals.icu to Google Health API sync adapter."""
-import datetime as dt
 import logging
-import os
-from typing import Dict, List, Any
+from typing import Dict, List
 
-import psycopg2.extras
 
 from src.sync_base import BaseSyncAdapter
 from GOOGLE_HEALTH_API.mappers import map_intervals_batch

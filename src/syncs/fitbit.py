@@ -27,7 +27,7 @@ class FitbitSync(BaseSyncAdapter):
 
         headers = {"Authorization": f"Bearer {access_token}"}
         today = dt.date.today()
-        oldest = today - dt.timedelta(days=6)
+        oldest = today - dt.timedelta(days=self.days_back - 1)
 
         base = f"https://api.fitbit.com/1/user/{user_id}"
         endpoints = {

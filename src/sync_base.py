@@ -19,7 +19,8 @@ class BaseSyncAdapter(ABC):
     columns: List[str] = None
     days_back: int = 7
 
-    def __init__(self):
+    def __init__(self, days_back: int = 7):
+        self.days_back = days_back
         if not self.table_name:
             raise ValueError(f"{self.__class__.__name__}.table_name not set")
         if not self.columns:

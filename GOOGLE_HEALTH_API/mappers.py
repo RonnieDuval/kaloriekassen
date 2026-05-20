@@ -92,6 +92,7 @@ def map_intervals_to_google_exercise(
     distance_km = intervals_row.get("distance_km", 0.0) or 0.0
     elevation_gain = intervals_row.get("elevation_gain", 0) or 0
     workout_type = intervals_row.get("workout_type")
+    elapsed_time = intervals_row.get("elapsed_time", 0) or 0
 
     # Calculate start and end times (use day boundaries in local time)
     # Start: 00:00 local, End: 23:59:59 local
@@ -144,6 +145,9 @@ def map_intervals_to_google_exercise(
 
     if elevation_millimeters > 0:
         data_point["exercise"]["metricsSummary"]["elevationGainMillimeters"] = elevation_millimeters
+
+    if elapsed_time > 0:
+        data_point["exercise"]["activeDuration"] = f"{elapsed_time}s"
 
     logger.debug(
         f"Mapped exercise: {date} {exercise_type} "

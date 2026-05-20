@@ -15,7 +15,7 @@ class IntervalsSync(BaseSyncAdapter):
     """Sync last 7 days of Intervals.icu workout data aggregated by day."""
 
     table_name = "raw_intervals"
-    columns = ["date", "calories_out", "distance_km", "elevation_gain", "workout_type"]
+    columns = ["date", "calories_out", "distance_km", "elevation_gain", "workout_type", "elapsed_time"]
 
     def fetch_data(self) -> List[Dict]:
         """Fetch last 7 days of Intervals.icu activity data, aggregated by day."""
@@ -53,12 +53,14 @@ class IntervalsSync(BaseSyncAdapter):
                     "distance_km": 0.0,
                     "elevation_gain": 0,
                     "workout_type": None,
+                    "elapsed_time": 0,
                 },
             )
 
             metrics["calories_out"] += int(item.get("calories", 0) or 0)
             metrics["distance_km"] += float(item.get("distance", 0) or 0) / 1000
             metrics["elevation_gain"] += int(item.get("total_elevation_gain", 0) or 0)
+            metrics["elapsed_time"] += int(item.get("elapsed_time", 0) or 0)
             workout_type = item.get("type")
             if workout_type:
                 metrics["workout_type"] = workout_type

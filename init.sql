@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS raw_intervals (
     distance_km FLOAT,
     elevation_gain INT,
     workout_type TEXT,
+    elapsed_time INT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

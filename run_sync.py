@@ -2,13 +2,15 @@
 """CLI runner for database-backed syncs.
 
 Orchestrates fetching and syncing data from multiple sources (Intervals.icu, MyFitnessPal, Fitbit)
-into their respective PostgreSQL tables.
+into their respective PostgreSQL tables, and uploading to Google Health API.
 
 Usage:
-    python run_sync.py                # Run all syncs
-    python run_sync.py intervals      # Run Intervals.icu only
-    python run_sync.py myfitnesspal   # Run MyFitnessPal only
-    python run_sync.py fitbit         # Run Fitbit only
+    python run_sync.py                     # Run all syncs
+    python run_sync.py intervals           # Run Intervals.icu only
+    python run_sync.py myfitnesspal        # Run MyFitnessPal only
+    python run_sync.py fitbit              # Run Fitbit only
+    python run_sync.py google-health       # Run Intervals → Google Health upload
+    python run_sync.py intervals myfitnesspal google-health  # Multiple syncs
 """
 import argparse
 import logging
@@ -19,6 +21,7 @@ from src.syncs.intervals import IntervalsSync
 from src.syncs.myfitnesspal import MyFitnessPalSync
 from src.syncs.fitbit import FitbitSync
 from src.sync_base import BaseSyncAdapter
+from GOOGLE_HEALTH_API.sync_adapter import IntervalsToGoogleHealthSync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +37,7 @@ def get_available_syncs() -> dict:
         "intervals": IntervalsSync,
         "myfitnesspal": MyFitnessPalSync,
         "fitbit": FitbitSync,
+        "google-health": IntervalsToGoogleHealthSync,
     }
 
 
@@ -90,7 +94,7 @@ def main():
     parser.add_argument(
         "syncs",
         nargs="*",
-        help="Which syncs to run (intervals, myfitnesspal, fitbit). If none specified, runs all.",
+        help="Which syncs to run (intervals, myfitnesspal, fitbit, google-health). If none specified, runs all.",
     )
     
     args = parser.parse_args()

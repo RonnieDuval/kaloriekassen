@@ -24,6 +24,7 @@ def test_fetch_intervals_activities_live():
         pytest.skip("pandas is not installed")
 
     df = module.fetch_intervals_activities()
+    breakpoint()
 
     assert hasattr(df, "shape")
     assert len(df.columns) > 0

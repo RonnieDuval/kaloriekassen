@@ -9,7 +9,7 @@ import psycopg2.extras
 from src.sync_base import BaseSyncAdapter
 from GOOGLE_HEALTH_API.mappers import map_intervals_batch
 from GOOGLE_HEALTH_API.uploader import upload_exercise_records, GoogleHealthUploadError
-from GOOGLE_HEALTH_API.google_health_access import get_fresh_access_token
+from GOOGLE_HEALTH_API.google_health_access import get_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,13 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
     2. Map to Google Health Exercise format
     3. Upload to Google Health API
     4. Log results
+    
+    Note: This sync only reads from DB and uploads to external API,
+    so we don't use the standard table_name/columns upsert pattern.
     """
 
     table_name = "raw_intervals"
+    columns = ["date"]  # Minimal columns - we read directly, not via upsert
     
     def __init__(self):
         """Initialize sync adapter with Google Health API credentials."""
@@ -35,25 +39,12 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
         self._load_google_credentials()
 
     def _load_google_credentials(self):
-        """Load Google OAuth credentials from file."""
-        google_token_file = os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "secrets",
-            "google_oauth_token.json"
-        )
-        
-        if not os.path.exists(google_token_file):
-            raise FileNotFoundError(
-                f"Google OAuth token file not found: {google_token_file}. "
-                "Run setup_google_health.py first."
-            )
-        
+        """Load Google OAuth credentials and refresh access token."""
         try:
-            self.access_token, self.refresh_token = get_fresh_access_token(
-                google_token_file
-            )
-            logger.info("Loaded Google Health API credentials")
+            creds = get_credentials()
+            self.access_token = creds.token
+            self.refresh_token = creds.refresh_token
+            logger.info("Loaded and refreshed Google Health API credentials")
         except Exception as e:
             raise RuntimeError(f"Failed to load Google credentials: {str(e)}")
 
@@ -67,35 +58,35 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
         # Note: We don't use self.columns here since we read from DB
         # This is a read-only fetch for upload purposes
         
-        cursor = self.get_db_cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT date, calories_out, distance_km, elevation_gain, workout_type
-                FROM raw_intervals
-                WHERE date >= (CURRENT_DATE - INTERVAL '6 days')
-                ORDER BY date DESC
-                """
-            )
-            rows = cursor.fetchall()
+        from src.db import get_db_connection
+        
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT date, calories_out, distance_km, elevation_gain, workout_type, elapsed_time
+                    FROM raw_intervals
+                    WHERE date >= (CURRENT_DATE - INTERVAL '10 days')
+                    ORDER BY date DESC
+                    """
+                )
+                rows = cursor.fetchall()
             
-            # Convert to list of dicts
-            results = [
-                {
-                    "date": row[0],
-                    "calories_out": row[1],
-                    "distance_km": row[2],
-                    "elevation_gain": row[3],
-                    "workout_type": row[4],
-                }
-                for row in rows
-            ]
-            
-            logger.info(f"Fetched {len(results)} days from raw_intervals")
-            return results
-            
-        finally:
-            cursor.close()
+        # Convert to list of dicts
+        results = [
+            {
+                "date": row[0],
+                "calories_out": row[1],
+                "distance_km": row[2],
+                "elevation_gain": row[2],
+                "workout_type": row[4],
+                "elapsed_time": row[5],
+            }
+            for row in rows
+        ]
+        
+        logger.info(f"Fetched {len(results)} days from raw_intervals")
+        return results
 
     def run(self) -> int:
         """
@@ -156,8 +147,6 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
         except Exception as e:
             logger.error(f"Sync failed: {str(e)}", exc_info=True)
             return 1
-        finally:
-            self.close_db()
 
 
 def main():

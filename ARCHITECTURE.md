@@ -15,14 +15,17 @@ kaloriekassen/
 │       └── intervals.py          # IntervalsSync class (→ raw_intervals)
 ├── GOOGLE_HEALTH_API/            # Google Health API integration
 │   ├── setup_google_health.py    # OAuth setup & refresh token management
-│   └── google_health_access.py   # Credential helpers & API client
-├── INTERVALS_ICU/                # Intervals.icu data fetcher
-│   └── hent_intervals_icu.py     # CSV-based activity fetch
+│   ├── google_health_access.py   # Credential helpers & API client
+│   ├── mappers.py                # Convert Intervals→Google Health format
+│   ├── uploader.py               # POST to Google Health API
+│   ├── sync_adapter.py           # Orchestrate DB→mapping→upload pipeline
+│   └── README.md                 # Integration guide
+├── INTERVALS_ICU/                # Intervals.icu folder
+│   └── __init__.py
 ├── MYFITNESSPAL/                 # MyFitnessPal data fetcher
 │   └── mfp_chatgpt.py            # Playwright browser automation
-├── sync_fitbit.py                # Fitbit entry point
-├── sync_intervals.py             # Intervals.icu entry point
-├── run_sync.py                   # CLI runner for DB-backed syncs
+├── sync_intervals_to_gha.py      # Upload Intervals to Google Health (entry point)
+├── run_sync.py                   # CLI runner: intervals, myfitnesspal, fitbit, google-health
 ├── requirements.txt              # Dependencies
 ├── Dockerfile
 ├── docker-compose.yml
@@ -78,7 +81,7 @@ Then it automatically works with the common DB upsert flow.
 
 ## Usage
 
-### Run all DB-backed syncs (Fitbit + Intervals)
+### Run all syncs (Fitbit + Intervals + MyFitnessPal + Google Health)
 
 ```bash
 python run_sync.py
@@ -87,15 +90,16 @@ python run_sync.py
 ### Run individual syncs
 
 ```bash
-python run_sync.py fitbit       # Fitbit only
-python run_sync.py intervals    # Intervals.icu only
+python run_sync.py intervals          # Fetch Intervals → raw_intervals
+python run_sync.py myfitnesspal       # Fetch MyFitnessPal → raw_mfp
+python run_sync.py fitbit             # Fetch Fitbit → raw_fitbit
+python run_sync.py google-health      # Upload Intervals → Google Health API
 ```
 
-Or use direct entry points:
+Or upload to Google Health directly:
 
 ```bash
-python sync_fitbit.py
-python sync_intervals.py
+python sync_intervals_to_gha.py       # Standalone upload script
 ```
 
 ### MyFitnessPal browser automation
@@ -124,20 +128,35 @@ Open browser for manual login:
 python MYFITNESSPAL/mfp_chatgpt.py --visible 2026-05-13
 ```
 
-### Google Health API setup (one-time)
+### Google Health API workflow
+
+**Setup (one-time):**
 
 ```bash
 python GOOGLE_HEALTH_API/setup_google_health.py
 ```
 
-This opens your browser for Google login, you grant permission, and the refresh
-token is saved to `secrets/google_oauth_token.json`. Future calls can use:
+This opens browser for Google login, requests `googlehealth.activity_and_fitness` scope, and saves refresh token to `secrets/google_oauth_token.json`.
 
-```python
-from GOOGLE_HEALTH_API.google_health_access import get_credentials
+**Upload Intervals workouts to Google Health:**
 
-creds = get_credentials()  # Automatically refreshes if needed
+```bash
+python run_sync.py google-health      # Via CLI
+# or
+python sync_intervals_to_gha.py       # Direct entry point
 ```
+
+This:
+1. Reads last 7 days from `raw_intervals` (Intervals.icu data)
+2. Maps each workout to Google Health Exercise format
+3. Validates access token (auto-refreshes if needed)
+4. POSTs to Google Health API endpoint
+5. Reports success/failure per record
+
+**Verify upload in Google Health app:**
+- Open Google Health app
+- Go to "My data" → "Workouts"
+- Should see exercise records synced from Intervals.icu
 
 ## File Responsibilities
 
@@ -148,12 +167,15 @@ creds = get_credentials()  # Automatically refreshes if needed
 | `src/sync_base.py` | Abstract base class with common DB sync logic |
 | `src/syncs/fitbit.py` | FitbitSync implementation → `raw_fitbit` |
 | `src/syncs/intervals.py` | IntervalsSync implementation → `raw_intervals` |
+| `src/syncs/myfitnesspal.py` | MyFitnessPalSync implementation → `raw_mfp` |
 | `GOOGLE_HEALTH_API/setup_google_health.py` | OAuth flow & token setup |
 | `GOOGLE_HEALTH_API/google_health_access.py` | Credential management & token refresh |
-| `INTERVALS_ICU/hent_intervals_icu.py` | CSV fetch from Intervals.icu API |
+| `GOOGLE_HEALTH_API/mappers.py` | Convert Intervals.icu → Google Health Exercise format |
+| `GOOGLE_HEALTH_API/uploader.py` | POST exercise records to Google Health API |
+| `GOOGLE_HEALTH_API/sync_adapter.py` | Orchestrate: read raw_intervals → map → authenticate → upload |
 | `MYFITNESSPAL/mfp_chatgpt.py` | Playwright browser automation for MyFitnessPal |
-| `sync_fitbit.py` / `sync_intervals.py` | Thin entry points for DB-backed syncs |
-| `run_sync.py` | CLI orchestrator for DB-backed syncs |
+| `run_sync.py` | CLI orchestrator: intervals, myfitnesspal, fitbit, google-health |
+| `sync_intervals_to_gha.py` | Direct entry point for Google Health upload |
 
 ## Future Improvements
 

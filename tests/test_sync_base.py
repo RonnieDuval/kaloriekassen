@@ -82,6 +82,9 @@ def test_upsert_rows(mock_get_conn):
     # Setup mock connection
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
+    mock_cursor.connection = mock_conn
+    mock_conn.encoding = 'UTF8'
+    mock_cursor.mogrify.return_value = b"(1, 2, 3)"
     mock_get_conn.return_value.__enter__ = MagicMock(return_value=mock_conn)
     mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
@@ -105,6 +108,9 @@ def test_run_success(mock_get_conn, mock_logger):
     """Test that run() orchestrates fetch + upsert successfully."""
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
+    mock_cursor.connection = mock_conn
+    mock_conn.encoding = 'UTF8'
+    mock_cursor.mogrify.return_value = b"(1, 2, 3)"
     mock_get_conn.return_value.__enter__ = MagicMock(return_value=mock_conn)
     mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)

@@ -32,6 +32,7 @@ def kopier_profil_hvis_mangler():
                 "GPUCache",
                 "ShaderCache",
             ),
+            dirs_exist_ok=True,
         )
     else:
         shutil.copytree(

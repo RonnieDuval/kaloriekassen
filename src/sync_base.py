@@ -1,5 +1,4 @@
 """Base class for all data sync adapters."""
-import datetime as dt
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List
@@ -47,7 +46,6 @@ class BaseSyncAdapter(ABC):
 
         # Build column list (date first, then others)
         col_names = ["date"] + [c for c in self.columns if c != "date"]
-        placeholders = ",".join(["%s"] * len(col_names))
 
         # Build SET clause for ON CONFLICT
         set_clause = ", ".join([f"{col} = EXCLUDED.{col}" for col in self.columns if col != "date"])
@@ -79,6 +77,6 @@ class BaseSyncAdapter(ABC):
             rows = self.fetch_data()
             self.upsert_to_db(rows)
             logger.info("Successfully completed sync for %s", self.table_name)
-        except Exception as e:
+        except Exception:
             logger.exception("Sync failed for %s", self.table_name)
             raise

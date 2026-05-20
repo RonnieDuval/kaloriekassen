@@ -25,7 +25,6 @@ from typing import List
 from src.syncs.intervals import IntervalsSync
 from src.syncs.myfitnesspal import MyFitnessPalSync
 from src.syncs.fitbit import FitbitSync
-from src.sync_base import BaseSyncAdapter
 from GOOGLE_HEALTH_API.sync_adapter import IntervalsToGoogleHealthSync
 
 logging.basicConfig(

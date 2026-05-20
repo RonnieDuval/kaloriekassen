@@ -19,10 +19,19 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
     Sync Intervals.icu workout data to Google Health API as exercise records.
     
     Flow:
-    1. Read last 7 days from raw_intervals table
+    1. Read last N days from raw_intervals table
     2. Map to Google Health Exercise format
     3. Upload to Google Health API
     4. Log results
+    
+    Usage:
+        # Upload last 7 days (default)
+        sync = IntervalsToGoogleHealthSync()
+        sync.run()
+        
+        # Upload last 150 days (backfill)
+        sync = IntervalsToGoogleHealthSync(days_back=150)
+        sync.run()
     
     Note: This sync only reads from DB and uploads to external API,
     so we don't use the standard table_name/columns upsert pattern.
@@ -31,8 +40,14 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
     table_name = "raw_intervals"
     columns = ["date"]  # Minimal columns - we read directly, not via upsert
     
-    def __init__(self):
-        """Initialize sync adapter with Google Health API credentials."""
+    def __init__(self, days_back: int = 7):
+        """
+        Initialize sync adapter with Google Health API credentials.
+        
+        Args:
+            days_back: Number of days to fetch and upload (default 7)
+        """
+        self.days_back = days_back
         super().__init__()
         self.access_token = None
         self.refresh_token = None
@@ -50,14 +65,11 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
 
     def fetch_data(self) -> List[Dict]:
         """
-        Fetch last 7 days of Intervals.icu data from raw_intervals table.
+        Fetch last N days of Intervals.icu data from raw_intervals table.
         
         Returns:
             List of rows from raw_intervals (read-only, for mapping)
         """
-        # Note: We don't use self.columns here since we read from DB
-        # This is a read-only fetch for upload purposes
-        
         from src.db import get_db_connection
         
         with get_db_connection() as conn:
@@ -66,9 +78,10 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
                     """
                     SELECT date, calories_out, distance_km, elevation_gain, workout_type, elapsed_time
                     FROM raw_intervals
-                    WHERE date >= (CURRENT_DATE - INTERVAL '10 days')
+                    WHERE date >= (CURRENT_DATE - INTERVAL %s)
                     ORDER BY date DESC
-                    """
+                    """,
+                    (f"{self.days_back} days",)
                 )
                 rows = cursor.fetchall()
             
@@ -78,14 +91,14 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
                 "date": row[0],
                 "calories_out": row[1],
                 "distance_km": row[2],
-                "elevation_gain": row[2],
+                "elevation_gain": row[3],
                 "workout_type": row[4],
                 "elapsed_time": row[5],
             }
             for row in rows
         ]
         
-        logger.info(f"Fetched {len(results)} days from raw_intervals")
+        logger.info(f"Fetched {len(results)} days from raw_intervals (last {self.days_back} days)")
         return results
 
     def run(self) -> int:

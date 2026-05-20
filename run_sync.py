@@ -5,12 +5,17 @@ Orchestrates fetching and syncing data from multiple sources (Intervals.icu, MyF
 into their respective PostgreSQL tables, and uploading to Google Health API.
 
 Usage:
-    python run_sync.py                     # Run all syncs
-    python run_sync.py intervals           # Run Intervals.icu only
-    python run_sync.py myfitnesspal        # Run MyFitnessPal only
-    python run_sync.py fitbit              # Run Fitbit only
-    python run_sync.py google-health       # Run Intervals → Google Health upload
-    python run_sync.py intervals myfitnesspal google-health  # Multiple syncs
+    python run_sync.py                                # Run all syncs (default 7 days)
+    python run_sync.py intervals                      # Run Intervals.icu only (default 7 days)
+    python run_sync.py myfitnesspal                   # Run MyFitnessPal only
+    python run_sync.py fitbit                         # Run Fitbit only
+    python run_sync.py google-health                  # Run Intervals → Google Health upload (default 7 days)
+    python run_sync.py intervals myfitnesspal         # Multiple syncs
+    
+    # Backfill options (applies to intervals and google-health)
+    python run_sync.py intervals --days 150           # Backfill 150 days
+    python run_sync.py google-health --days 30        # Upload last 30 days to GHA
+    python run_sync.py intervals google-health --days 60  # Sync and upload last 60 days
 """
 import argparse
 import logging
@@ -41,11 +46,12 @@ def get_available_syncs() -> dict:
     }
 
 
-def run_syncs(sync_names: List[str]) -> int:
+def run_syncs(sync_names: List[str], days_back: int = 7) -> int:
     """Run specified syncs.
     
     Args:
         sync_names: List of sync names to run, or empty list for all syncs.
+        days_back: Number of days to fetch (applies to Intervals and Google Health syncs)
     
     Returns:
         0 on success, 1 on failure.
@@ -67,9 +73,15 @@ def run_syncs(sync_names: List[str]) -> int:
             continue
         
         try:
-            logger.info("Starting %s sync...", sync_name)
+            logger.info("Starting %s sync (days_back=%d)...", sync_name, days_back)
             sync_class = available[sync_name]
-            sync = sync_class()
+            
+            # Only pass days_back to syncs that support it
+            if sync_name in ("intervals", "google-health"):
+                sync = sync_class(days_back=days_back)
+            else:
+                sync = sync_class()
+            
             sync.run()
             logger.info("%s sync completed successfully", sync_name)
         except Exception as e:
@@ -97,9 +109,16 @@ def main():
         help="Which syncs to run (intervals, myfitnesspal, fitbit, google-health). If none specified, runs all.",
     )
     
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=7,
+        help="Number of days to fetch (applies to intervals and google-health syncs). Default: 7",
+    )
+    
     args = parser.parse_args()
     
-    exit_code = run_syncs(args.syncs)
+    exit_code = run_syncs(args.syncs, days_back=args.days)
     sys.exit(exit_code)
 
 

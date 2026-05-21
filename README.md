@@ -14,6 +14,33 @@ KalorieKassen synkroniserer data fra flere kilder til PostgreSQL med én råtabe
 docker compose up --build
 ```
 
+## Kørsel med interval i container
+
+Hvis `run_sync.py` skal køre løbende i en container, kan du bruge `sync_scheduler` servicen i `docker-compose.yml`.
+
+Servicen har **indbyggede defaults** i `docker-compose.yml`:
+
+- `SYNC_TARGETS`: `intervals myfitnesspal fitbit google-health`
+- `SYNC_DAYS`: `7`
+- `SYNC_INTERVAL_SECONDS`: `21600` (6 timer)
+
+Det betyder, at den kan starte uden at du sætter dem i `.env`.
+
+Hvis du vil override defaults, kan du sætte dem i `.env` (valgfrit):
+
+```env
+SYNC_TARGETS=intervals myfitnesspal
+SYNC_DAYS=14
+SYNC_INTERVAL_SECONDS=3600
+```
+
+Start scheduleren:
+
+```bash
+docker compose up --build sync_scheduler
+```
+
+
 Sæt credentials i `docker-compose.yml` eller via miljøvariabler.
 
 ## MyFitnessPal - Browser automation via Playwright

@@ -25,7 +25,6 @@ from typing import List
 from src.syncs.intervals import IntervalsSync
 from src.syncs.myfitnesspal import MyFitnessPalSync
 from src.syncs.fitbit import FitbitSync
-from src.sync_base import BaseSyncAdapter
 from GOOGLE_HEALTH_API.sync_adapter import IntervalsToGoogleHealthSync
 
 logging.basicConfig(
@@ -76,11 +75,8 @@ def run_syncs(sync_names: List[str], days_back: int = 7) -> int:
             logger.info("Starting %s sync (days_back=%d)...", sync_name, days_back)
             sync_class = available[sync_name]
             
-            # Only pass days_back to syncs that support it
-            if sync_name in ("intervals", "google-health"):
-                sync = sync_class(days_back=days_back)
-            else:
-                sync = sync_class()
+            # All syncs now support days_back via BaseSyncAdapter!
+            sync = sync_class(days_back=days_back)
             
             sync.run()
             logger.info("%s sync completed successfully", sync_name)

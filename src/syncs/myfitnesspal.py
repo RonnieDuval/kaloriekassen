@@ -27,7 +27,7 @@ class MyFitnessPalSync(BaseSyncAdapter):
     ]
 
     def fetch_data(self) -> List[Dict]:
-        """Fetch last 7 days of MyFitnessPal meal data via Playwright automation.
+        """Fetch last x days of MyFitnessPal meal data via Playwright automation.
         
         Returns:
             List of dicts with date, meals_detail (JSONB), and aggregated totals.

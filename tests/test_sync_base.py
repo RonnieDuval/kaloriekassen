@@ -1,6 +1,6 @@
 """Unit tests for sync adapters."""
 import datetime as dt
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 from src.sync_base import BaseSyncAdapter
 

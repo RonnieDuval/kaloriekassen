@@ -36,5 +36,33 @@ services:
       - ./temp_chrome_profile:/app/temp_chrome_profile
     restart: "no"
 
+  sync_scheduler:
+    build: .
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      SYNC_TARGETS: ${SYNC_TARGETS:-intervals myfitnesspal fitbit google-health}
+      SYNC_DAYS: ${SYNC_DAYS:-7}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-21600}
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -e
+        while true; do
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Running sync: $SYNC_TARGETS (days=$SYNC_DAYS)"
+          python run_sync.py $SYNC_TARGETS --days "$SYNC_DAYS"
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Sleeping $SYNC_INTERVAL_SECONDS seconds"
+          sleep "$SYNC_INTERVAL_SECONDS"
+        done
+    volumes:
+      - ${HOME}/.config/google-chrome:/root/.config/google-chrome:ro
+      - ./temp_chrome_profile:/app/temp_chrome_profile
+    restart: unless-stopped
+
+
 volumes:
   pgdata:

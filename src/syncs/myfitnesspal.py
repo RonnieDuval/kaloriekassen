@@ -26,6 +26,10 @@ class MyFitnessPalSync(BaseSyncAdapter):
         "fetched_at",
     ]
 
+    def __init__(self, days_back: int = 7, visible: bool = False):
+        super().__init__(days_back)
+        self.visible = visible
+
     def fetch_data(self) -> List[Dict]:
         """Fetch last x days of MyFitnessPal meal data via Playwright automation.
         
@@ -38,7 +42,7 @@ class MyFitnessPalSync(BaseSyncAdapter):
         logger.info("Fetching MyFitnessPal data for last %d days via browser automation...", self.days_back)
 
         try:
-            mfp_data = hent_mfp_seneste_dage(self.days_back, visible=False)
+            mfp_data = hent_mfp_seneste_dage(self.days_back, visible=self.visible)
         except Exception as e:
             logger.error("Failed to fetch MyFitnessPal data: %s", str(e))
             raise

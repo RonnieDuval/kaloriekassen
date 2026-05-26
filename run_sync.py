@@ -18,6 +18,7 @@ Usage:
     python run_sync.py intervals google-health --days 60  # Sync and upload last 60 days
 """
 import argparse
+import inspect
 import logging
 import sys
 from typing import List
@@ -45,12 +46,13 @@ def get_available_syncs() -> dict:
     }
 
 
-def run_syncs(sync_names: List[str], days_back: int = 7) -> int:
+def run_syncs(sync_names: List[str], days_back: int = 7, visible: bool = False) -> int:
     """Run specified syncs.
     
     Args:
         sync_names: List of sync names to run, or empty list for all syncs.
         days_back: Number of days to fetch (applies to Intervals and Google Health syncs)
+        visible: Run browser automation in visible/headed mode (if supported)
     
     Returns:
         0 on success, 1 on failure.
@@ -75,8 +77,12 @@ def run_syncs(sync_names: List[str], days_back: int = 7) -> int:
             logger.info("Starting %s sync (days_back=%d)...", sync_name, days_back)
             sync_class = available[sync_name]
             
-            # All syncs now support days_back via BaseSyncAdapter!
-            sync = sync_class(days_back=days_back)
+            # Check if sync class accepts visible flag
+            sig = inspect.signature(sync_class)
+            if "visible" in sig.parameters:
+                sync = sync_class(days_back=days_back, visible=visible)
+            else:
+                sync = sync_class(days_back=days_back)
             
             sync.run()
             logger.info("%s sync completed successfully", sync_name)
@@ -112,9 +118,15 @@ def main():
         help="Number of days to fetch (applies to intervals and google-health syncs). Default: 7",
     )
     
+    parser.add_argument(
+        "--visible",
+        action="store_true",
+        help="Run browser automation in visible/headed mode (useful for initial login on Windows)",
+    )
+    
     args = parser.parse_args()
     
-    exit_code = run_syncs(args.syncs, days_back=args.days)
+    exit_code = run_syncs(args.syncs, days_back=args.days, visible=args.visible)
     sys.exit(exit_code)
 
 

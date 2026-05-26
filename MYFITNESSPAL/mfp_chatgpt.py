@@ -1,5 +1,7 @@
+import os
 import re
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 import datetime as dt
@@ -7,45 +9,124 @@ import datetime as dt
 from playwright.sync_api import sync_playwright
 
 
-CHROME_DIR = Path.home() / ".config/google-chrome"
+if sys.platform == "win32":
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        CHROME_DIR = Path(local_app_data) / "Google/Chrome/User Data"
+    else:
+        CHROME_DIR = Path.home() / "AppData/Local/Google/Chrome/User Data"
+elif sys.platform == "darwin":
+    CHROME_DIR = Path.home() / "Library/Application Support/Google/Chrome"
+else:
+    CHROME_DIR = Path.home() / ".config/google-chrome"
+
 PROFILE_DIR = Path.cwd() / "temp_chrome_profile"
 
 
-def kopier_profil_hvis_mangler():
-    if PROFILE_DIR.exists():
+def robust_copytree(src: Path, dst: Path, ignore_patterns=None):
+    if not src.exists():
+        print(f"Advarsel: Kilde-mappe {src} findes ikke.")
         return
 
-    print("Kopierer Chrome profil første gang...")
+    dst.mkdir(parents=True, exist_ok=True)
+
+    for item in src.iterdir():
+        if ignore_patterns and any(item.match(pat) for pat in ignore_patterns):
+            continue
+
+        if "lock" in item.name.lower() or item.name in {
+            "SingletonCookie",
+            "SingletonSocket",
+            "SingletonLock",
+        }:
+            continue
+
+        target = dst / item.name
+        if item.is_dir():
+            try:
+                robust_copytree(item, target, ignore_patterns)
+            except Exception as e:
+                print(f"Kunne ikke kopiere mappe {item}: {e}")
+        else:
+            try:
+                shutil.copy2(item, target)
+            except (PermissionError, OSError) as e:
+                print(f"Kunne ikke kopiere fil {item} (sandsynligvis låst): {e}")
+            except Exception as e:
+                print(f"Kunne ikke kopiere fil {item}: {e}")
+
+
+def er_temp_profil_logget_ind():
+    cookies_path = PROFILE_DIR / "Default" / "Network" / "Cookies"
+    if not cookies_path.exists():
+        cookies_path = PROFILE_DIR / "Default" / "Cookies"
+        
+    if not cookies_path.exists():
+        return False
+        
+    try:
+        conn = sqlite3.connect(str(cookies_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM cookies WHERE host_key LIKE '%myfitnesspal%' AND name = 'user_session' LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        return row is not None
+    except Exception:
+        return False
+
+
+def kopier_profil_hvis_mangler():
+    if PROFILE_DIR.exists() and er_temp_profil_logget_ind():
+        # Hvis den midlertidige profil allerede har en aktiv login-session, overskriver vi den ikke!
+        return
 
     source_default = CHROME_DIR / "Default"
     target_default = PROFILE_DIR / "Default"
 
-    PROFILE_DIR.mkdir(exist_ok=True)
+    skal_kopiere = False
+    if not PROFILE_DIR.exists():
+        skal_kopiere = True
+    elif source_default.exists() and not target_default.exists():
+        skal_kopiere = True
+    elif not source_default.exists() and not any(PROFILE_DIR.iterdir()):
+        skal_kopiere = True
+    else:
+        # Hvis profilen allerede findes, tjekker vi om kilde-cookies er blevet opdateret (f.eks. ved manuelt login i Chrome)
+        source_cookies = CHROME_DIR / "Default" / "Network" / "Cookies"
+        if not source_cookies.exists():
+            source_cookies = CHROME_DIR / "Default" / "Cookies"
+
+        target_cookies = PROFILE_DIR / "Default" / "Network" / "Cookies"
+        if not target_cookies.exists():
+            target_cookies = PROFILE_DIR / "Default" / "Cookies"
+
+        if source_cookies.exists() and target_cookies.exists():
+            try:
+                if source_cookies.stat().st_mtime > target_cookies.stat().st_mtime:
+                    print("Detekterede nyere cookies i din primære Chrome-browser. Genkopierer profil...")
+                    skal_kopiere = True
+            except Exception:
+                pass
+
+    if not skal_kopiere:
+        return
+
+    print("Kopierer Chrome profil...")
+
+    ignore_patterns = ["Cache*", "Code Cache", "GPUCache", "ShaderCache"]
 
     if source_default.exists():
-        shutil.copytree(
-            source_default,
-            target_default,
-            ignore=shutil.ignore_patterns(
-                "Cache*",
-                "Code Cache",
-                "GPUCache",
-                "ShaderCache",
-            ),
-            dirs_exist_ok=True,
-        )
+        robust_copytree(source_default, target_default, ignore_patterns)
+        # Kopier også Local State (vigtigt på Windows for at kunne dekryptere cookies)
+        source_local_state = CHROME_DIR / "Local State"
+        target_local_state = PROFILE_DIR / "Local State"
+        if source_local_state.exists():
+            try:
+                shutil.copy2(source_local_state, target_local_state)
+            except Exception as e:
+                print(f"Kunne ikke kopiere Local State: {e}")
     else:
-        shutil.copytree(
-            CHROME_DIR,
-            PROFILE_DIR,
-            ignore=shutil.ignore_patterns(
-                "Cache*",
-                "Code Cache",
-                "GPUCache",
-                "ShaderCache",
-            ),
-            dirs_exist_ok=True,
-        )
+        robust_copytree(CHROME_DIR, PROFILE_DIR, ignore_patterns)
 
 
 def ryd_laasfiler():
@@ -172,16 +253,24 @@ def hent_mfp_dag(dato_streng="2026-05-13", visible=False):
             headless=not visible,
             channel="chrome",
             viewport={"width": 1280, "height": 1024},
+            ignore_default_args=["--enable-automation"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
 
         try:
             page = context.new_page()
-            page.goto(url, wait_until="networkidle", timeout=30_000)
+            page.goto(url, wait_until="load", timeout=30_000)
 
             if "login" in page.url and visible:
-                print("Log ind manuelt i browseren og tryk Enter her bagefter...")
+                print("\n=========================================================================")
+                print("LOG IND MANUELT: Log ind i det åbnede browser-vindue.")
+                print("VIGTIGT: Lad være med at lukke browser-vinduet selv!")
+                print("Tryk i stedet Enter her i denne terminal, når du er færdig med at logge ind...")
+                print("=========================================================================\n")
                 input()
-                page.goto(url, wait_until="networkidle", timeout=30_000)
+                page.goto(url, wait_until="load", timeout=30_000)
 
             page.locator("table.table0").wait_for(state="visible", timeout=15_000)
             page.wait_for_timeout(1_000)
@@ -192,6 +281,12 @@ def hent_mfp_dag(dato_streng="2026-05-13", visible=False):
             }
 
         except Exception as e:
+            try:
+                screenshot_path = Path.cwd() / "mfp_error_screenshot.png"
+                page.screenshot(path=str(screenshot_path))
+                print(f"[FEJL] Gemte fejl-screenshot til {screenshot_path}. Sidens aktuelle URL var: {page.url}")
+            except Exception as se:
+                print(f"[FEJL] Kunne ikke gemme fejl-screenshot: {se}")
             print(f"[FEJL] Fejl under hentning: {e}")
             return None
 

@@ -78,7 +78,11 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
         Returns:
             List of rows from raw_intervals (read-only, for mapping)
         """
+        import datetime as dt
         from src.db import get_db_connection
+        
+        # Calculate start date in Python for database compatibility (Postgres/SQLite)
+        start_date = dt.date.today() - dt.timedelta(days=self.days_back)
         
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
@@ -86,10 +90,10 @@ class IntervalsToGoogleHealthSync(BaseSyncAdapter):
                     """
                     SELECT date, calories_out, distance_km, elevation_gain, workout_type, elapsed_time, activities
                     FROM raw_intervals
-                    WHERE date >= (CURRENT_DATE - INTERVAL %s)
+                    WHERE date >= %s
                     ORDER BY date DESC
                     """,
-                    (f"{self.days_back} days",)
+                    (start_date,)
                 )
                 rows = cursor.fetchall()
             

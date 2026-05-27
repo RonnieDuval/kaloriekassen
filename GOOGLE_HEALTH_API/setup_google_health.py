@@ -18,7 +18,8 @@ import requests
 import settings
 
 
-GOOGLE_HEALTH_SCOPE = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness"
+# GOOGLE_HEALTH_SCOPE = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness"
+GOOGLE_HEALTH_SCOPE = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly"
 
 
 def get_auth_code() -> str:

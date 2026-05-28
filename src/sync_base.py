@@ -3,9 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
-from psycopg2.extras import execute_values
-
-from src.db import get_db_connection
+from src.db import get_db_connection, execute_values
 
 logger = logging.getLogger(__name__)
 

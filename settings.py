@@ -12,6 +12,7 @@ GOOGLE_AUTH_CODE = os.getenv('GOOGLE_AUTH_CODE')
 
 # Local Level-1 storage location for refresh token
 GOOGLE_TOKEN_STORE_PATH = os.getenv('GOOGLE_TOKEN_STORE_PATH', 'secrets/google_oauth_token.json')
+GOOGLE_TOKEN_STORE_PATH2 = os.getenv('GOOGLE_TOKEN_STORE_PATH', 'secrets/google_oauth_token2.json')
 
 INTERVALS_ATHLETE_ID = os.getenv('INTERVALS_ATHLETE_ID')
 INTERVALS_API_KEY = os.getenv('INTERVALS_API_KEY')

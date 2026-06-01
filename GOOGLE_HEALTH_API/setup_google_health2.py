@@ -28,7 +28,7 @@ def main():
     )
 
     # 3. Gemmer tokens præcis i det format og den sti, dit system kender
-    token_store_path = Path(settings.GOOGLE_TOKEN_STORE_PATH2)
+    token_store_path = Path(settings.GOOGLE_TOKEN_STORE_PATH)
     token_store_path.parent.mkdir(parents=True, exist_ok=True)
 
     token_data = {

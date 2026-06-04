@@ -1,3 +1,9 @@
+"""
+Dette er en opdateret version af setup_google_health.py, der bruger Google Auth Library's officielle SDK til at håndtere OAuth-flowet. 
+Den starter en midlertidig lokal server for at fange tokens automatisk, hvilket eliminerer behovet for manuel indtastning af auth_code. 
+Det sikrer også, at refresh_token gemmes korrekt i det forventede format og sti.
+"""
+
 #!/usr/bin/env python3
 import json
 from pathlib import Path
@@ -15,10 +21,10 @@ def main():
     
     # 1. Indlæser din eksisterende client_secret JSON-fil
     flow = InstalledAppFlow.from_client_secrets_file(
-        'google_api_client_secrets2.json', 
+        'google_api_client_secrets2.json',
         scopes=SCOPES
     )
-    breakpoint()
+    
     # 2. Starter en midlertidig, lokal baggrundsserver på port 8080.
     # Den åbner browseren automatisk, fanger tokens i luften og lukker sig selv med det samme.
     credentials = flow.run_local_server(

@@ -12,6 +12,7 @@ from typing import Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 
 import settings
 
@@ -89,6 +90,9 @@ def get_credentials(
     )
 
     if refresh_now and not creds.valid:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            raise RefreshError(f"Google credentials have expired or been revoked: {e}")
 
     return creds

@@ -27,6 +27,9 @@ from src.syncs.intervals import IntervalsSync
 from src.syncs.myfitnesspal import MyFitnessPalSync
 from src.syncs.fitbit import FitbitSync
 from GOOGLE_HEALTH_API.sync_adapter import IntervalsToGoogleHealthSync
+from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError
+from GOOGLE_HEALTH_API.setup_google_health2 import main as run_oauth_flow
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,12 +80,25 @@ def run_syncs(sync_names: List[str], days_back: int = 7, visible: bool = False) 
             logger.info("Starting %s sync (days_back=%d)...", sync_name, days_back)
             sync_class = available[sync_name]
             
-            # Check if sync class accepts visible flag
-            sig = inspect.signature(sync_class)
-            if "visible" in sig.parameters:
-                sync = sync_class(days_back=days_back, visible=visible)
-            else:
-                sync = sync_class(days_back=days_back)
+            def create_sync_instance():
+                sig = inspect.signature(sync_class)
+                if "visible" in sig.parameters:
+                    return sync_class(days_back=days_back, visible=visible)
+                return sync_class(days_back=days_back)
+
+            try:
+                # 1. Første forsøg på at starte sync-klassen
+                sync = create_sync_instance()
+            except RefreshError:
+                # Denne blok rammes KUN, hvis det er Google, og tokenet er dødt
+                logger.warning("Google token expired for %s. Starting OAuth flow...", sync_name)
+                
+                # Kør dit browser-setup
+                run_oauth_flow()
+                
+                logger.info("OAuth flow completed. Retrying %s sync...", sync_name)
+                # 2. Andet forsøg med det nye friske token
+                sync = create_sync_instance()
             
             sync.run()
             logger.info("%s sync completed successfully", sync_name)

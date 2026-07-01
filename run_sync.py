@@ -29,7 +29,7 @@ from src.syncs.fitbit import FitbitSync
 from GOOGLE_HEALTH_API.sync_adapter import IntervalsToGoogleHealthSync
 from google.auth.exceptions import RefreshError
 from google.auth.exceptions import RefreshError
-from GOOGLE_HEALTH_API.setup_google_health2 import main as run_oauth_flow
+from GOOGLE_HEALTH_API.setup_google_health import main as run_oauth_flow
 
 logging.basicConfig(
     level=logging.INFO,

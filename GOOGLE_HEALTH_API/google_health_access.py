@@ -12,6 +12,7 @@ from typing import Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 
 import settings
 
@@ -40,6 +41,29 @@ def _load_refresh_token() -> Optional[str]:
     return token if isinstance(token, str) and token else None
 
 
+def _load_client_secrets() -> dict:
+    """Load client ID and client secret from google_api_client_secrets2.json."""
+    secrets_path = Path(__file__).parent.parent / "google_api_client_secrets2.json"
+    if not secrets_path.exists():
+        raise FileNotFoundError(f"Client secrets file not found: {secrets_path}")
+
+    try:
+        data = json.loads(secrets_path.read_text(encoding="utf-8"))
+        # Assuming the structure is for a 'web' application, adjust if 'installed'
+        if "web" in data:
+            client_id = data["web"]["client_id"]
+            client_secret = data["web"]["client_secret"]
+        elif "installed" in data:
+            client_id = data["installed"]["client_id"]
+            client_secret = data["installed"]["client_secret"]
+        else:
+            raise ValueError("Invalid client secrets file format.")
+    except (OSError, json.JSONDecodeError, KeyError) as e:
+        raise ValueError(f"Failed to parse client secrets file: {e}")
+
+    return {"client_id": client_id, "client_secret": client_secret}
+
+
 def get_credentials(
     refresh_token: Optional[str] = None,
     *,
@@ -56,15 +80,19 @@ def get_credentials(
             "No refresh token available. Run OAuth flow and save token first."
         )
 
+    client_secrets = _load_client_secrets()
     creds = Credentials(
         token=None,
         refresh_token=token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=settings.GOOGLE_CLIENT_ID,
-        client_secret=settings.GOOGLE_CLIENT_SECRET,
+        client_id=client_secrets["client_id"],
+        client_secret=client_secrets["client_secret"],
     )
 
     if refresh_now and not creds.valid:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            raise RefreshError(f"Google credentials have expired or been revoked: {e}")
 
     return creds

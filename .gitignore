@@ -10,3 +10,4 @@ temp_chrome_profile/
 .mfp_profile/
 *.csv
 *.db
+*json

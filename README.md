@@ -19,12 +19,18 @@ uv run kaloriekassen intervals google-health-export --days 7
 uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
 uv run kaloriekassen google-health-read
+uv run kaloriekassen google-health-auth
 ```
 
 Det første svarer til den tidligere kommando `uv run run_sync.py intervals
 google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
 eksporterede aktiviteter til Google Health. `google-health-read` er en separat,
 read-only replika-kørsel.
+
+Hvis Google afviser et gemt refresh-token (`invalid_grant`), starter
+`google-health-export` automatisk OAuth-flowet i browseren, gemmer et nyt
+refresh-token og prøver eksporten igen. OAuth-flowet kan også startes manuelt
+med `uv run kaloriekassen google-health-auth`.
 
 Hvis du tidligere har fået `Failed to spawn: kaloriekassen`, så opdatér til en
 version med pakkekonfigurationen her og kør `uv sync` én gang. Derefter virker

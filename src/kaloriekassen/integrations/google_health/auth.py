@@ -7,6 +7,7 @@ Level 1 token storage:
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +16,9 @@ from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 def _token_store_path() -> Path:
@@ -78,7 +82,16 @@ def get_credentials(
     if refresh_now and not creds.valid:
         try:
             creds.refresh(Request())
-        except RefreshError as e:
-            raise RefreshError(f"Google credentials have expired or been revoked: {e}")
+        except RefreshError:
+            logger.warning(
+                "Google rejected the stored refresh token; starting the OAuth recovery flow."
+            )
+            # Import lazily: setup needs the client-secret helper in this module.
+            from kaloriekassen.integrations.google_health.setup import run_oauth_flow
+
+            run_oauth_flow()
+            # The interactive flow persisted a replacement token. Rebuild the
+            # credentials and refresh it so callers retain the normal contract.
+            return get_credentials(refresh_now=refresh_now)
 
     return creds

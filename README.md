@@ -14,6 +14,9 @@ differenceanalyse og sendes aldrig til en anden tjeneste.
 
 ## Kommandoer
 
+Kør først kommandoerne fra projektmappen. `uv` installerer da projektet selv
+og opretter kommandoen `kaloriekassen` i miljøet.
+
 ```bash
 uv run kaloriekassen intervals google-health-export --days 7
 uv run kaloriekassen myfitnesspal --days 7
@@ -25,6 +28,10 @@ Det første svarer til den tidligere kommando `uv run run_sync.py intervals
 google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
 eksporterede aktiviteter til Google Health. `google-health-read` er en separat,
 read-only replika-kørsel.
+
+Hvis du tidligere har fået `Failed to spawn: kaloriekassen`, så opdatér til en
+version med pakkekonfigurationen her og kør `uv sync` én gang. Derefter virker
+`uv run kaloriekassen ...` også fra PowerShell.
 
 ## Databasevalg
 

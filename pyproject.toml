@@ -21,6 +21,10 @@ dependencies = [
     "ruff>=0.15.13",
 ]
 
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project.scripts]
 kaloriekassen = "kaloriekassen.cli:main"
 

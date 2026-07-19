@@ -43,6 +43,7 @@ FROM raw_mfp m LEFT JOIN (
 ) i ON i.date = m.date;
 """
 
+
 POSTGRES_SCHEMA = SQLITE_SCHEMA.replace("TEXT", "TEXT").replace(
     "CREATE VIEW IF NOT EXISTS daily_balance AS", "CREATE OR REPLACE VIEW daily_balance AS"
 ).replace("substr(started_at, 1, 10)", "substring(started_at from 1 for 10)")

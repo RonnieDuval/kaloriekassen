@@ -1,3 +1,24 @@
+Metadata-Version: 2.4
+Name: kaloriekassen
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: browser-cookie3>=0.20.1
+Requires-Dist: bs4>=0.0.2
+Requires-Dist: google-auth-oauthlib>=1.4.0
+Requires-Dist: google-oauth2-tool>=0.0.3
+Requires-Dist: lxml>=5.4.0
+Requires-Dist: myfitnesspal>=2.1.2
+Requires-Dist: pandas>=3.0.3
+Requires-Dist: playwright>=1.59.0
+Requires-Dist: psycopg2-binary>=2.9.12
+Requires-Dist: pytest>=9.0.3
+Requires-Dist: python-dotenv>=1.2.2
+Requires-Dist: requests-toolbelt>=1.0.0
+Requires-Dist: rich>=12.6.0
+Requires-Dist: ruff>=0.15.13
+
 # Kaloriekassen
 
 Kaloriekassen er en lokal database for data fra Intervals.icu, MyFitnessPal og
@@ -25,11 +46,6 @@ Det første svarer til den tidligere kommando `uv run run_sync.py intervals
 google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
 eksporterede aktiviteter til Google Health. `google-health-read` er en separat,
 read-only replika-kørsel.
-
-Hvis du tidligere har fået `Failed to spawn: kaloriekassen`, så opdatér til en
-version med pakkekonfigurationen her og kør `uv sync` én gang. Derefter virker
-`uv run kaloriekassen ...` også fra PowerShell.
-
 
 ## Databasevalg
 

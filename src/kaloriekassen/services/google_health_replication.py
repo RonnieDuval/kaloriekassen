@@ -1,6 +1,6 @@
 """Replicate Google Health exercise records locally; never writes to Google."""
 from datetime import datetime, timezone
-from kaloriekassen.database.connection import get_db_connection, json_value
+from kaloriekassen.database.connection import execute, get_db_connection, json_value
 from kaloriekassen.integrations.google_health.auth import get_credentials
 from kaloriekassen.integrations.google_health.reader import fetch_exercises
 
@@ -14,7 +14,7 @@ def replicate() -> int:
             record_id = record.get("name")
             if not record_id:
                 continue
-            conn.execute("""INSERT INTO raw_google_health_exercises
+            execute(conn, """INSERT INTO raw_google_health_exercises
                 (google_health_id, start_time, end_time, exercise_type, payload, fetched_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(google_health_id) DO UPDATE SET start_time=excluded.start_time,

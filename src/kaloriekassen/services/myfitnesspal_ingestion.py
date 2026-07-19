@@ -1,6 +1,6 @@
 """Ingest MyFitnessPal diary days into the local database."""
 from datetime import datetime, timezone
-from kaloriekassen.database.connection import get_db_connection, json_value
+from kaloriekassen.database.connection import execute, get_db_connection, json_value
 from kaloriekassen.database.nutrition import aggregate_meals_to_totals
 from kaloriekassen.integrations.myfitnesspal.client import hent_mfp_seneste_dage
 
@@ -11,7 +11,7 @@ def ingest(days_back: int, visible: bool = False) -> int:
         for day in days:
             totals = aggregate_meals_to_totals(day.get("meals", {}))
             now = datetime.now(timezone.utc).isoformat()
-            conn.execute("""INSERT INTO raw_mfp
+            execute(conn, """INSERT INTO raw_mfp
                 (date, meals_detail, calories_in, protein, carbs, fat, sodium, sugar, fetched_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(date) DO UPDATE SET meals_detail=excluded.meals_detail,

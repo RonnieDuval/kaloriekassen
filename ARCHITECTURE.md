@@ -27,3 +27,8 @@ source payload is retained. Google Health reads and uploads are deliberately
 separate services; the read replica is never an upload source.
 
 Fitbit is not part of the application.
+
+## Database backend
+
+When `DB_TYPE` is blank, local runs use SQLite and container runs use PostgreSQL.
+Both backends create the same four application tables when a connection opens.

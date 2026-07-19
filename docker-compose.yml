@@ -1,14 +1,24 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-kaloriekassen}
+      POSTGRES_USER: ${DB_USER:-kalorie}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-kalorie}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   sync:
     build: .
+    depends_on:
+      - db
     env_file: .env
     environment:
-      DB_TYPE: sqlite
-      SQLITE_DB_PATH: /data/kaloriekassen.db
+      DB_HOST: db
     command: ["kaloriekassen", "intervals", "google-health-export", "google-health-read"]
-    volumes:
-      - kaloriekassen_data:/data
     restart: "no"
 
 volumes:
-  kaloriekassen_data:
+  postgres_data:

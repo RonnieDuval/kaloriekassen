@@ -1,7 +1,7 @@
 """Export unsent Intervals activities to Google Health."""
 from datetime import datetime, timezone
 import json
-from kaloriekassen.database.connection import get_db_connection, json_value
+from kaloriekassen.database.connection import execute, get_db_connection, json_value
 from kaloriekassen.integrations.google_health.auth import get_credentials
 from kaloriekassen.integrations.google_health.client import upload_exercise_records
 from kaloriekassen.integrations.google_health.mapper import map_single_activity_to_google_exercise
@@ -9,7 +9,7 @@ from kaloriekassen.integrations.google_health.mapper import map_single_activity_
 
 def export() -> int:
     with get_db_connection() as conn:
-        rows = conn.execute("""SELECT i.activity_id, i.payload FROM raw_intervals i
+        rows = execute(conn, """SELECT i.activity_id, i.payload FROM raw_intervals i
             LEFT JOIN google_health_exports e ON e.intervals_activity_id = i.activity_id AND e.status = 'sent'
             WHERE e.intervals_activity_id IS NULL ORDER BY i.started_at""").fetchall()
         access_token = get_credentials().token
@@ -18,7 +18,7 @@ def export() -> int:
             result = upload_exercise_records(access_token, [request_payload])
             status = "sent" if result["successful"] else "failed"
             error = result["failed"][0]["error"] if result["failed"] else None
-            conn.execute("""INSERT INTO google_health_exports
+            execute(conn, """INSERT INTO google_health_exports
                 (intervals_activity_id, request_payload, status, last_error, attempted_at, sent_at)
                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(intervals_activity_id) DO UPDATE SET
                 request_payload=excluded.request_payload, status=excluded.status, last_error=excluded.last_error,

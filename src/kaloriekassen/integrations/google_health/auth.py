@@ -14,12 +14,12 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 
-import settings
+import os
 
 
 def _token_store_path() -> Path:
     """Return path to local token store file."""
-    return Path(settings.GOOGLE_TOKEN_STORE_PATH)
+    return Path(os.getenv("GOOGLE_TOKEN_STORE_PATH", "secrets/google_oauth_token.json"))
 
 
 def _load_refresh_token() -> Optional[str]:
@@ -42,25 +42,11 @@ def _load_refresh_token() -> Optional[str]:
 
 
 def _load_client_secrets() -> dict:
-    """Load client ID and client secret from google_api_client_secrets2.json."""
-    secrets_path = Path(__file__).parent.parent / "google_api_client_secrets2.json"
-    if not secrets_path.exists():
-        raise FileNotFoundError(f"Client secrets file not found: {secrets_path}")
-
-    try:
-        data = json.loads(secrets_path.read_text(encoding="utf-8"))
-        # Assuming the structure is for a 'web' application, adjust if 'installed'
-        if "web" in data:
-            client_id = data["web"]["client_id"]
-            client_secret = data["web"]["client_secret"]
-        elif "installed" in data:
-            client_id = data["installed"]["client_id"]
-            client_secret = data["installed"]["client_secret"]
-        else:
-            raise ValueError("Invalid client secrets file format.")
-    except (OSError, json.JSONDecodeError, KeyError) as e:
-        raise ValueError(f"Failed to parse client secrets file: {e}")
-
+    """Load OAuth application credentials from the environment."""
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured")
     return {"client_id": client_id, "client_secret": client_secret}
 
 

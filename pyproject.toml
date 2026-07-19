@@ -21,6 +21,9 @@ dependencies = [
     "ruff>=0.15.13",
 ]
 
+[project.scripts]
+kaloriekassen = "kaloriekassen.cli:main"
+
 [tool.pytest.ini_options]
 markers = [
     "integration: tests that call external services",

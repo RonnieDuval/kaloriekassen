@@ -46,11 +46,21 @@ def test_hent_mfp_dag_uses_cookie_header_and_rejects_login_page(request_get, mon
     response = Mock(url="https://www.myfitnesspal.com/login", text="login")
     request_get.return_value = response
 
-    with pytest.raises(client.MyFitnessPalAuthenticationError, match="udløbet"):
+    with pytest.raises(
+        client.MyFitnessPalAuthenticationError,
+        match="Svar-URL: https://www.myfitnesspal.com/login.*user_session",
+    ):
         client.hent_mfp_dag("2026-07-20")
 
     request_get.assert_called_once()
     assert request_get.call_args.kwargs["headers"]["Cookie"] == "user_session=secret"
+
+
+def test_cookie_names_excludes_cookie_values():
+    assert client._cookie_names("euconsent-v2=secret; user_session=another-secret") == [
+        "euconsent-v2",
+        "user_session",
+    ]
 
 
 @patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")

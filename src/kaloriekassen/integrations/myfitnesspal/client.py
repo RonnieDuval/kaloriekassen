@@ -84,6 +84,15 @@ def _cookie_header() -> str:
     return cookie_header
 
 
+def _cookie_names(cookie_header: str) -> list[str]:
+    """Return cookie names only; never include secret cookie values in errors."""
+    return [
+        name.strip()
+        for part in cookie_header.split(";")
+        if (name := part.partition("=")[0]).strip()
+    ]
+
+
 def _is_login_page(response: requests.Response) -> bool:
     """Return whether a response is a login page, without flagging site scripts."""
     if "/login" in response.url.lower():
@@ -95,10 +104,14 @@ def _is_login_page(response: requests.Response) -> bool:
 
 def hent_mfp_dag(dato_streng: str) -> dict:
     """Fetch one diary date without attempting an automated MyFitnessPal login."""
+    cookie_header = _cookie_header()
     response = requests.get(
         DIARY_URL.format(date=dato_streng),
         headers={
-            "Cookie": _cookie_header(),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "da-DK,da;q=0.9,en;q=0.8",
+            "Cookie": cookie_header,
+            "Referer": "https://www.myfitnesspal.com/",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
         },
@@ -107,9 +120,11 @@ def hent_mfp_dag(dato_streng: str) -> dict:
     response.raise_for_status()
 
     if _is_login_page(response):
+        cookie_names = ", ".join(_cookie_names(cookie_header)) or "ingen"
         raise MyFitnessPalAuthenticationError(
             "MyFitnessPal-sessionen er udløbet eller blev afvist. Log ind manuelt "
-            "i din almindelige browser og opdatér MFP_COOKIE_HEADER."
+            "i din almindelige browser og opdatér MFP_COOKIE_HEADER. "
+            f"Svar-URL: {response.url}. Send kun cookie-navnene ved fejlsøgning: {cookie_names}."
         )
 
     return parse_food_rows(response.text, dato_streng)

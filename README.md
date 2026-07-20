@@ -29,6 +29,12 @@ din almindelige browser, find en godkendt diary-request i browserens DevTools,
 og kopiér dens `Cookie`-header til `.env` som `MFP_COOKIE_HEADER=...`. Både
 værdien alene og formen `Cookie: navn=værdi; ...` accepteres. Headeren er en
 hemmelighed og må ikke commit'es.
+
+En `Cookie`-header kan godt begynde med `euconsent-v2`; den cookie er kun et
+samtykke. Headeren skal også indeholde den aktive login-cookie (den tidligere
+klient ledte efter `user_session`). Kopiér altid headeren fra en **vellykket
+diary-request**, ikke fra login-siden eller cookie-listen. Del aldrig selve
+cookie-værdierne ved fejlsøgning — fejlbeskeden viser kun cookie-navne.
 Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
 den eksisterende session uden at forsøge et automatiseret login. Når sessionen
 udløber, skal headeren kopieres igen efter manuelt login.

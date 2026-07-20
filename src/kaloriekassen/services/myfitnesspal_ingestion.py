@@ -5,8 +5,8 @@ from kaloriekassen.database.nutrition import aggregate_meals_to_totals
 from kaloriekassen.integrations.myfitnesspal.client import hent_mfp_seneste_dage
 
 
-def ingest(days_back: int, visible: bool = False) -> int:
-    days = hent_mfp_seneste_dage(days_back, visible=visible)
+def ingest(days_back: int) -> int:
+    days = hent_mfp_seneste_dage(days_back)
     with get_db_connection() as conn:
         for day in days:
             totals = aggregate_meals_to_totals(day.get("meals", {}))

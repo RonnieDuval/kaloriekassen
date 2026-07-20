@@ -1,0 +1,53 @@
+from unittest.mock import Mock, patch
+
+import pytest
+
+from kaloriekassen.integrations.myfitnesspal import client
+
+
+def test_parse_food_rows_parses_meals_and_skips_controls():
+    html = """
+    <table class="table0"><tbody>
+      <tr class="meal_header"><td>Breakfast</td></tr>
+      <tr><td>Oatmeal</td><td>250</td><td>42</td><td>5</td><td>8</td><td>10</td><td>2</td></tr>
+      <tr><td>Add Food</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+      <tr class="total"><td>Total</td><td>250</td></tr>
+    </tbody></table>
+    """
+
+    assert client.parse_food_rows(html, "2026-07-20") == {
+        "date": "2026-07-20",
+        "meals": {
+            "Breakfast": [
+                {
+                    "name": "Oatmeal",
+                    "calories": 250,
+                    "carbohydrates": 42,
+                    "fat": 5,
+                    "protein": 8,
+                    "sodium": 10,
+                    "sugar": 2,
+                }
+            ]
+        },
+    }
+
+
+def test_hent_mfp_dag_requires_a_manually_created_session(monkeypatch):
+    monkeypatch.delenv(client.COOKIE_HEADER_ENV_VAR, raising=False)
+
+    with pytest.raises(client.MyFitnessPalAuthenticationError, match="MFP_COOKIE_HEADER"):
+        client.hent_mfp_dag("2026-07-20")
+
+
+@patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")
+def test_hent_mfp_dag_uses_cookie_header_and_rejects_login_page(request_get, monkeypatch):
+    monkeypatch.setenv(client.COOKIE_HEADER_ENV_VAR, "user_session=secret")
+    response = Mock(url="https://www.myfitnesspal.com/login", text="login")
+    request_get.return_value = response
+
+    with pytest.raises(client.MyFitnessPalAuthenticationError, match="udløbet"):
+        client.hent_mfp_dag("2026-07-20")
+
+    request_get.assert_called_once()
+    assert request_get.call_args.kwargs["headers"]["Cookie"] == "user_session=secret"

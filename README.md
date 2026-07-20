@@ -22,6 +22,16 @@ uv run kaloriekassen google-health-read
 uv run kaloriekassen google-health-auth
 ```
 
+### MyFitnessPal
+
+MyFitnessPal afviser login fra browserautomatisering. Log derfor ind manuelt i
+din almindelige browser, find en godkendt diary-request i browserens DevTools,
+og kopiér dens fulde `Cookie`-request-header til `.env` som
+`MFP_COOKIE_HEADER=...`. Headeren er en hemmelighed og må ikke commit'es.
+Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
+den eksisterende session uden at forsøge et automatiseret login. Når sessionen
+udløber, skal headeren kopieres igen efter manuelt login.
+
 Det første svarer til den tidligere kommando `uv run run_sync.py intervals
 google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
 eksporterede aktiviteter til Google Health. `google-health-read` er en separat,

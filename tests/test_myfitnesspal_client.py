@@ -79,3 +79,21 @@ def test_hent_mfp_dag_does_not_treat_a_recaptcha_script_as_a_login_page(request_
     request_get.return_value = response
 
     assert client.hent_mfp_dag("2026-07-20")["meals"]["Breakfast"][0]["name"] == "Oatmeal"
+
+
+@patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")
+def test_hent_mfp_dag_does_not_treat_diary_password_ui_as_a_login_page(request_get, monkeypatch):
+    monkeypatch.setenv(client.COOKIE_HEADER_ENV_VAR, "_mfp_session=secret")
+    response = Mock(
+        url="https://www.myfitnesspal.com/food/diary?date=2026-07-20",
+        text="""
+        <input type="password" name="password" />
+        <table class="table0"><tbody>
+          <tr class="meal_header"><td>Breakfast</td></tr>
+          <tr><td>Oatmeal</td><td>250</td><td>42</td><td>5</td><td>8</td></tr>
+        </tbody></table>
+        """,
+    )
+    request_get.return_value = response
+
+    assert client.hent_mfp_dag("2026-07-20")["meals"]["Breakfast"][0]["name"] == "Oatmeal"

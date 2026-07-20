@@ -22,6 +22,10 @@ class MyFitnessPalAuthenticationError(RuntimeError):
     """Raised when the manually-created MyFitnessPal session is unavailable."""
 
 
+class MyFitnessPalUnexpectedPageError(RuntimeError):
+    """Raised when MyFitnessPal returns neither a diary nor a login page."""
+
+
 def rens_tal(tekst: str) -> int:
     match = re.search(r"(-?\d+)", tekst.replace(",", ""))
     return int(match.group(1)) if match else 0
@@ -94,12 +98,21 @@ def _cookie_names(cookie_header: str) -> list[str]:
 
 
 def _is_login_page(response: requests.Response) -> bool:
-    """Return whether a response is a login page, without flagging site scripts."""
+    """Return whether a response is a login page, without flagging diary UI."""
     if "/login" in response.url.lower():
         return True
 
     document = html.fromstring(response.text)
+    if document.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " table0 ")]'):
+        return False
     return bool(document.xpath('//input[@type="password"]'))
+
+
+def _has_diary_table(page_html: str) -> bool:
+    document = html.fromstring(page_html)
+    return bool(
+        document.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " table0 ")]')
+    )
 
 
 def hent_mfp_dag(dato_streng: str) -> dict:
@@ -125,6 +138,12 @@ def hent_mfp_dag(dato_streng: str) -> dict:
             "MyFitnessPal-sessionen er udløbet eller blev afvist. Log ind manuelt "
             "i din almindelige browser og opdatér MFP_COOKIE_HEADER. "
             f"Svar-URL: {response.url}. Send kun cookie-navnene ved fejlsøgning: {cookie_names}."
+        )
+
+    if not _has_diary_table(response.text):
+        raise MyFitnessPalUnexpectedPageError(
+            "MyFitnessPal returnerede ikke en diary-side. "
+            f"Svar-URL: {response.url}."
         )
 
     return parse_food_rows(response.text, dato_streng)

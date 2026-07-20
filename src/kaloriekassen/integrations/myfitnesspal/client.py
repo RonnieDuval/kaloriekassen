@@ -1,195 +1,60 @@
+"""Fetch MyFitnessPal diary pages using a session created in a normal browser.
+
+MyFitnessPal rejects login attempts made in an automated browser.  Authentication
+is therefore deliberately kept out of this module: log in in ordinary Chrome,
+then provide the resulting Cookie request header through ``MFP_COOKIE_HEADER``.
+"""
+
+import datetime as dt
 import os
 import re
-import shutil
-import sqlite3
-import sys
-from pathlib import Path
-import datetime as dt
 
-from playwright.sync_api import sync_playwright
+import requests
+from lxml import html
 
 
-if sys.platform == "win32":
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        CHROME_DIR = Path(local_app_data) / "Google/Chrome/User Data"
-    else:
-        CHROME_DIR = Path.home() / "AppData/Local/Google/Chrome/User Data"
-elif sys.platform == "darwin":
-    CHROME_DIR = Path.home() / "Library/Application Support/Google/Chrome"
-else:
-    CHROME_DIR = Path.home() / ".config/google-chrome"
-
-PROFILE_DIR = Path.cwd() / "temp_chrome_profile"
+DIARY_URL = "https://www.myfitnesspal.com/food/diary?date={date}"
+COOKIE_HEADER_ENV_VAR = "MFP_COOKIE_HEADER"
+REQUEST_TIMEOUT_SECONDS = 30
 
 
-def robust_copytree(src: Path, dst: Path, ignore_patterns=None):
-    if not src.exists():
-        print(f"Advarsel: Kilde-mappe {src} findes ikke.")
-        return
-
-    dst.mkdir(parents=True, exist_ok=True)
-
-    for item in src.iterdir():
-        if ignore_patterns and any(item.match(pat) for pat in ignore_patterns):
-            continue
-
-        if "lock" in item.name.lower() or item.name in {
-            "SingletonCookie",
-            "SingletonSocket",
-            "SingletonLock",
-        }:
-            continue
-
-        target = dst / item.name
-        if item.is_dir():
-            try:
-                robust_copytree(item, target, ignore_patterns)
-            except Exception as e:
-                print(f"Kunne ikke kopiere mappe {item}: {e}")
-        else:
-            try:
-                shutil.copy2(item, target)
-            except (PermissionError, OSError) as e:
-                print(f"Kunne ikke kopiere fil {item} (sandsynligvis låst): {e}")
-            except Exception as e:
-                print(f"Kunne ikke kopiere fil {item}: {e}")
+class MyFitnessPalAuthenticationError(RuntimeError):
+    """Raised when the manually-created MyFitnessPal session is unavailable."""
 
 
-def er_temp_profil_logget_ind():
-    cookies_path = PROFILE_DIR / "Default" / "Network" / "Cookies"
-    if not cookies_path.exists():
-        cookies_path = PROFILE_DIR / "Default" / "Cookies"
-        
-    if not cookies_path.exists():
-        return False
-        
-    try:
-        conn = sqlite3.connect(str(cookies_path))
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM cookies WHERE host_key LIKE '%myfitnesspal%' AND name = 'user_session' LIMIT 1")
-        row = cursor.fetchone()
-        conn.close()
-        return row is not None
-    except Exception:
-        return False
+class MyFitnessPalUnexpectedPageError(RuntimeError):
+    """Raised when MyFitnessPal returns neither a diary nor a login page."""
 
 
-def kopier_profil_hvis_mangler():
-    if PROFILE_DIR.exists() and er_temp_profil_logget_ind():
-        # Hvis den midlertidige profil allerede har en aktiv login-session, overskriver vi den ikke!
-        return
-
-    source_default = CHROME_DIR / "Default"
-    target_default = PROFILE_DIR / "Default"
-
-    skal_kopiere = False
-    if not PROFILE_DIR.exists():
-        skal_kopiere = True
-    elif source_default.exists() and not target_default.exists():
-        skal_kopiere = True
-    elif not source_default.exists() and not any(PROFILE_DIR.iterdir()):
-        skal_kopiere = True
-    else:
-        # Hvis profilen allerede findes, tjekker vi om kilde-cookies er blevet opdateret (f.eks. ved manuelt login i Chrome)
-        source_cookies = CHROME_DIR / "Default" / "Network" / "Cookies"
-        if not source_cookies.exists():
-            source_cookies = CHROME_DIR / "Default" / "Cookies"
-
-        target_cookies = PROFILE_DIR / "Default" / "Network" / "Cookies"
-        if not target_cookies.exists():
-            target_cookies = PROFILE_DIR / "Default" / "Cookies"
-
-        if source_cookies.exists() and target_cookies.exists():
-            try:
-                if source_cookies.stat().st_mtime > target_cookies.stat().st_mtime:
-                    print("Detekterede nyere cookies i din primære Chrome-browser. Genkopierer profil...")
-                    skal_kopiere = True
-            except Exception:
-                pass
-
-    if not skal_kopiere:
-        return
-
-    print("Kopierer Chrome profil...")
-
-    ignore_patterns = ["Cache*", "Code Cache", "GPUCache", "ShaderCache"]
-
-    if source_default.exists():
-        robust_copytree(source_default, target_default, ignore_patterns)
-        # Kopier også Local State (vigtigt på Windows for at kunne dekryptere cookies)
-        source_local_state = CHROME_DIR / "Local State"
-        target_local_state = PROFILE_DIR / "Local State"
-        if source_local_state.exists():
-            try:
-                shutil.copy2(source_local_state, target_local_state)
-            except Exception as e:
-                print(f"Kunne ikke kopiere Local State: {e}")
-    else:
-        robust_copytree(CHROME_DIR, PROFILE_DIR, ignore_patterns)
-
-
-def ryd_laasfiler():
-    for path in PROFILE_DIR.rglob("*"):
-        if path.is_file() and (
-            "lock" in path.name.lower() or path.name == "SingletonCookie"
-        ):
-            try:
-                path.unlink()
-            except OSError:
-                pass
-
-
-def rens_tal(tekst):
+def rens_tal(tekst: str) -> int:
     match = re.search(r"(-?\d+)", tekst.replace(",", ""))
     return int(match.group(1)) if match else 0
 
 
-def parse_food_rows(page, dato_streng):
-    meals = {}
-    current_meal = None
+def parse_food_rows(page_html: str, dato_streng: str) -> dict:
+    """Parse the food rows from an authenticated diary HTML response."""
+    document = html.fromstring(page_html)
+    meals: dict[str, list[dict[str, int | str]]] = {}
+    current_meal: str | None = None
 
-    rows = page.locator("table.table0 tbody tr")
-    antal_rows = rows.count()
+    for row in document.xpath('//table[contains(@class, "table0")]//tbody/tr'):
+        row_classes = set((row.get("class") or "").split())
+        cells = [" ".join(cell.itertext()).strip() for cell in row.xpath("./td")]
 
-    for i in range(antal_rows):
-        row = rows.nth(i)
-        row_class = row.get_attribute("class") or ""
-
-        cells = [cell.strip() for cell in row.locator("td").all_inner_texts()]
-
-        if "meal_header" in row_class:
+        if "meal_header" in row_classes:
             if cells:
                 current_meal = cells[0]
                 meals.setdefault(current_meal, [])
             continue
 
-        if not current_meal:
+        if not current_meal or row_classes.intersection({"bottom", "total", "spacer"}):
             continue
-
-        if "bottom" in row_class:
-            continue
-
-        if "total" in row_class:
-            continue
-
-        if "spacer" in row_class:
-            continue
-
-        # Food rows har typisk navn + calories, carbs, fat, protein, sodium, sugar
         if len(cells) < 5:
             continue
 
-        food_name = cells[0].strip()
-
-        # Spring tomme rækker, Add Food, Quick Tools osv. over
-        if not food_name:
+        food_name = cells[0]
+        if not food_name or food_name.lower() in {"add food", "quick tools"}:
             continue
-
-        if food_name.lower() in {"add food", "quick tools"}:
-            continue
-
-        # Kræv at kaloriefeltet ligner et tal
         if not re.search(r"\d+", cells[1]):
             continue
 
@@ -205,146 +70,106 @@ def parse_food_rows(page, dato_streng):
             }
         )
 
-    return {
-        "date": dato_streng,
-        "meals": meals,
-    }
+    return {"date": dato_streng, "meals": meals}
 
 
-def parse_totals(page, dato_streng):
-    total_rows = page.locator("tr.total")
-    total_rows.first.wait_for(state="visible", timeout=15_000)
-
-    for i in range(total_rows.count()):
-        cells = total_rows.nth(i).locator("td").all_inner_texts()
-        cells = [cell.strip() for cell in cells]
-
-        if len(cells) > 4 and re.search(r"\d+", cells[1]):
-            return {
-                "date": dato_streng,
-                "calories": rens_tal(cells[1]),
-                "carbohydrates": rens_tal(cells[2]),
-                "fat": rens_tal(cells[3]),
-                "protein": rens_tal(cells[4]),
-                "sodium": rens_tal(cells[5]) if len(cells) > 5 else 0,
-                "sugar": rens_tal(cells[6]) if len(cells) > 6 else 0,
-            }
-
-    return {
-        "date": dato_streng,
-        "calories": 0,
-        "carbohydrates": 0,
-        "fat": 0,
-        "protein": 0,
-        "sodium": 0,
-        "sugar": 0,
-    }
+def _cookie_header() -> str:
+    cookie_header = os.environ.get(COOKIE_HEADER_ENV_VAR, "").strip()
+    if not cookie_header:
+        raise MyFitnessPalAuthenticationError(
+            "MFP_COOKIE_HEADER mangler. Log ind manuelt i en almindelig browser, "
+            "kopiér Cookie-headeren fra en diary-request i DevTools, og gem den i .env."
+        )
+    # DevTools copies request headers as ``Cookie: name=value``. Accept that
+    # convenient form as well as the header value alone.
+    header_name, separator, header_value = cookie_header.partition(":")
+    if separator and header_name.strip().lower() == "cookie":
+        return header_value.strip()
+    return cookie_header
 
 
-def hent_mfp_dag(dato_streng="2026-05-13", visible=False):
-    kopier_profil_hvis_mangler()
-    ryd_laasfiler()
+def _cookie_names(cookie_header: str) -> list[str]:
+    """Return cookie names only; never include secret cookie values in errors."""
+    return [
+        name.strip()
+        for part in cookie_header.split(";")
+        if (name := part.partition("=")[0]).strip()
+    ]
 
-    url = f"https://www.myfitnesspal.com/food/diary?date={dato_streng}"
 
-    with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=str(PROFILE_DIR),
-            headless=not visible,
-            channel="chrome",
-            viewport={"width": 1280, "height": 1024},
-            ignore_default_args=["--enable-automation"],
-            args=[
-                "--disable-blink-features=AutomationControlled",
-            ],
+def _is_login_page(response: requests.Response) -> bool:
+    """Return whether a response is a login page, without flagging diary UI."""
+    if "/login" in response.url.lower():
+        return True
+
+    document = html.fromstring(response.text)
+    if document.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " table0 ")]'):
+        return False
+    return bool(document.xpath('//input[@type="password"]'))
+
+
+def _has_diary_table(page_html: str) -> bool:
+    document = html.fromstring(page_html)
+    return bool(
+        document.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " table0 ")]')
+    )
+
+
+def hent_mfp_dag(dato_streng: str) -> dict:
+    """Fetch one diary date without attempting an automated MyFitnessPal login."""
+    cookie_header = _cookie_header()
+    response = requests.get(
+        DIARY_URL.format(date=dato_streng),
+        headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "da-DK,da;q=0.9,en;q=0.8",
+            "Cookie": cookie_header,
+            "Referer": "https://www.myfitnesspal.com/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
+        },
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+
+    if _is_login_page(response):
+        cookie_names = ", ".join(_cookie_names(cookie_header)) or "ingen"
+        raise MyFitnessPalAuthenticationError(
+            "MyFitnessPal-sessionen er udløbet eller blev afvist. Log ind manuelt "
+            "i din almindelige browser og opdatér MFP_COOKIE_HEADER. "
+            f"Svar-URL: {response.url}. Send kun cookie-navnene ved fejlsøgning: {cookie_names}."
         )
 
-        try:
-            page = context.new_page()
-            page.goto(url, wait_until="load", timeout=30_000)
+    if not _has_diary_table(response.text):
+        raise MyFitnessPalUnexpectedPageError(
+            "MyFitnessPal returnerede ikke en diary-side. "
+            f"Svar-URL: {response.url}."
+        )
 
-            if "login" in page.url and visible:
-                print("\n=========================================================================")
-                print("LOG IND MANUELT: Log ind i det åbnede browser-vindue.")
-                print("VIGTIGT: Lad være med at lukke browser-vinduet selv!")
-                print("Tryk i stedet Enter her i denne terminal, når du er færdig med at logge ind...")
-                print("=========================================================================\n")
-                input()
-                page.goto(url, wait_until="load", timeout=30_000)
-
-            page.locator("table.table0").wait_for(state="visible", timeout=15_000)
-            page.wait_for_timeout(1_000)
-
-            return {
-                "date": dato_streng,
-                "meals": parse_food_rows(page, dato_streng)["meals"],
-            }
-
-        except Exception as e:
-            try:
-                screenshot_path = Path.cwd() / "mfp_error_screenshot.png"
-                page.screenshot(path=str(screenshot_path))
-                print(f"[FEJL] Gemte fejl-screenshot til {screenshot_path}. Sidens aktuelle URL var: {page.url}")
-            except Exception as se:
-                print(f"[FEJL] Kunne ikke gemme fejl-screenshot: {se}")
-            print(f"[FEJL] Fejl under hentning: {e}")
-            return None
-
-        finally:
-            context.close()
+    return parse_food_rows(response.text, dato_streng)
 
 
 def dato_interval(start_dato: dt.date, slut_dato: dt.date):
     dato = start_dato
-
     while dato <= slut_dato:
         yield dato
         dato += dt.timedelta(days=1)
 
 
-def hent_mfp_interval(start_dato: str, slut_dato: str | None = None, visible=False):
+def hent_mfp_interval(start_dato: str, slut_dato: str | None = None) -> list[dict]:
     start = dt.date.fromisoformat(start_dato)
     slut = dt.date.fromisoformat(slut_dato) if slut_dato else dt.date.today()
-
     resultater = []
 
     for dato in dato_interval(start, slut):
         dato_streng = dato.isoformat()
         print(f"Henter MFP for {dato_streng}")
-
-        data = hent_mfp_dag(dato_streng, visible=visible)
-
-        if data is not None:
-            resultater.append(data)
+        resultater.append(hent_mfp_dag(dato_streng))
 
     return resultater
 
 
-def hent_mfp_seneste_dage(antal_dage=7, visible=False):
+def hent_mfp_seneste_dage(antal_dage: int = 7) -> list[dict]:
     slut = dt.date.today()
     start = slut - dt.timedelta(days=antal_dage - 1)
-
-    return hent_mfp_interval(
-        start.isoformat(),
-        slut.isoformat(),
-        visible=visible,
-    )
-
-if __name__ == "__main__":
-    visible = "--visible" in sys.argv
-
-    if "--last-week" in sys.argv:
-        data = hent_mfp_seneste_dage(7, visible=visible)
-
-    elif "--from" in sys.argv:
-        start_index = sys.argv.index("--from") + 1
-        start_dato = sys.argv[start_index]
-        data = hent_mfp_interval(start_dato, visible=visible)
-
-    else:
-        datoer = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
-        dato = datoer[0] if datoer else dt.date.today().isoformat()
-        data = hent_mfp_dag(dato, visible=visible)
-
-    print("\nResultat:")
-    print(data)
+    return hent_mfp_interval(start.isoformat(), slut.isoformat())

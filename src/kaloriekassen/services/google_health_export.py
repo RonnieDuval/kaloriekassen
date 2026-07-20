@@ -12,6 +12,8 @@ def export() -> int:
         rows = execute(conn, """SELECT i.activity_id, i.payload FROM raw_intervals i
             LEFT JOIN google_health_exports e ON e.intervals_activity_id = i.activity_id AND e.status = 'sent'
             WHERE e.intervals_activity_id IS NULL ORDER BY i.started_at""").fetchall()
+        if not rows:
+            return 0
         access_token = get_credentials().token
         for activity_id, payload in rows:
             request_payload = map_single_activity_to_google_exercise(json.loads(payload))

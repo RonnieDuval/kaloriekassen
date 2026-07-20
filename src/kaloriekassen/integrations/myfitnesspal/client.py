@@ -76,7 +76,21 @@ def _cookie_header() -> str:
             "MFP_COOKIE_HEADER mangler. Log ind manuelt i en almindelig browser, "
             "kopiér Cookie-headeren fra en diary-request i DevTools, og gem den i .env."
         )
+    # DevTools copies request headers as ``Cookie: name=value``. Accept that
+    # convenient form as well as the header value alone.
+    header_name, separator, header_value = cookie_header.partition(":")
+    if separator and header_name.strip().lower() == "cookie":
+        return header_value.strip()
     return cookie_header
+
+
+def _is_login_page(response: requests.Response) -> bool:
+    """Return whether a response is a login page, without flagging site scripts."""
+    if "/login" in response.url.lower():
+        return True
+
+    document = html.fromstring(response.text)
+    return bool(document.xpath('//input[@type="password"]'))
 
 
 def hent_mfp_dag(dato_streng: str) -> dict:
@@ -92,7 +106,7 @@ def hent_mfp_dag(dato_streng: str) -> dict:
     )
     response.raise_for_status()
 
-    if "/login" in response.url or "recaptcha" in response.text.lower():
+    if _is_login_page(response):
         raise MyFitnessPalAuthenticationError(
             "MyFitnessPal-sessionen er udløbet eller blev afvist. Log ind manuelt "
             "i din almindelige browser og opdatér MFP_COOKIE_HEADER."

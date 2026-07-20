@@ -26,8 +26,9 @@ uv run kaloriekassen google-health-auth
 
 MyFitnessPal afviser login fra browserautomatisering. Log derfor ind manuelt i
 din almindelige browser, find en godkendt diary-request i browserens DevTools,
-og kopiér dens fulde `Cookie`-request-header til `.env` som
-`MFP_COOKIE_HEADER=...`. Headeren er en hemmelighed og må ikke commit'es.
+og kopiér dens `Cookie`-header til `.env` som `MFP_COOKIE_HEADER=...`. Både
+værdien alene og formen `Cookie: navn=værdi; ...` accepteres. Headeren er en
+hemmelighed og må ikke commit'es.
 Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
 den eksisterende session uden at forsøge et automatiseret login. Når sessionen
 udløber, skal headeren kopieres igen efter manuelt login.

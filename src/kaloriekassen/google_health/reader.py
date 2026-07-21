@@ -1,4 +1,4 @@
-"""Read-only Google Health replica client."""
+"""Read-only Google Health API client."""
 from typing import Any
 import requests
 

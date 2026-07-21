@@ -1,8 +1,7 @@
 """Google Health OAuth credential helpers.
 
-Level 1 token storage:
-- Keep static app config (client id/secret) in environment variables.
-- Persist refresh token in a local JSON file under ./secrets.
+The downloaded OAuth client configuration and the generated refresh token are
+stored as separate, ignored files under ``secrets/``.
 """
 from __future__ import annotations
 
@@ -29,6 +28,16 @@ def _token_store_path() -> Path:
     return Path(os.getenv("GOOGLE_TOKEN_STORE_PATH", "secrets/google_oauth_token.json"))
 
 
+def _client_secrets_path() -> Path:
+    """Return the downloaded Google Cloud OAuth client configuration path."""
+    return Path(
+        os.getenv(
+            "GOOGLE_CLIENT_SECRETS_PATH",
+            "secrets/google_api_client_secrets.json",
+        )
+    )
+
+
 def _load_refresh_token() -> Optional[str]:
     """Load refresh token from local JSON store.
 
@@ -49,12 +58,25 @@ def _load_refresh_token() -> Optional[str]:
 
 
 def _load_client_secrets() -> dict:
-    """Load OAuth application credentials from the environment."""
-    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    if not client_id or not client_secret:
-        raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured")
-    return {"client_id": client_id, "client_secret": client_secret}
+    """Load the active OAuth client section from Google's downloaded JSON."""
+    path = _client_secrets_path()
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise ValueError(
+            f"Google OAuth client file not found: {path}. "
+            "Download it from Google Cloud Console."
+        ) from error
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"Invalid Google OAuth client file: {path}") from error
+
+    client = document.get("installed") or document.get("web")
+    required_fields = {"client_id", "client_secret", "token_uri"}
+    if not isinstance(client, dict) or not required_fields.issubset(client):
+        raise ValueError(
+            "Google OAuth client file must contain a valid 'installed' or 'web' section"
+        )
+    return client
 
 
 def get_credentials(
@@ -77,7 +99,7 @@ def get_credentials(
     creds = Credentials(
         token=None,
         refresh_token=token,
-        token_uri="https://oauth2.googleapis.com/token",
+        token_uri=client_secrets["token_uri"],
         client_id=client_secrets["client_id"],
         client_secret=client_secrets["client_secret"],
     )
@@ -90,7 +112,7 @@ def get_credentials(
                 "Google rejected the stored refresh token; starting the OAuth recovery flow."
             )
             # Import lazily: setup needs the client-secret helper in this module.
-            from kaloriekassen.integrations.google_health.setup import run_oauth_flow
+            from kaloriekassen.google_health.setup import run_oauth_flow
 
             run_oauth_flow()
             # The interactive flow persisted a replacement token. Rebuild the

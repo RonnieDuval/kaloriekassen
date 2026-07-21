@@ -1,8 +1,8 @@
 import json
 import sqlite3
 
-from kaloriekassen.database.connection import get_db_connection
-from kaloriekassen.services import myfitnesspal_ingestion
+from kaloriekassen.db import get_db_connection
+from kaloriekassen.myfitnesspal import sync as myfitnesspal_sync
 
 
 def _diary_day(foods):
@@ -13,7 +13,7 @@ def test_ingest_stores_food_entries_and_exposes_aggregated_views(tmp_path, monke
     monkeypatch.setenv("DB_TYPE", "sqlite")
     monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "nutrition.db"))
     monkeypatch.setattr(
-        myfitnesspal_ingestion,
+        myfitnesspal_sync,
         "hent_mfp_seneste_dage",
         lambda _days: [_diary_day([
             {"name": "Oatmeal", "calories": 250, "carbohydrates": 42, "fat": 5,
@@ -23,7 +23,7 @@ def test_ingest_stores_food_entries_and_exposes_aggregated_views(tmp_path, monke
         ])],
     )
 
-    assert myfitnesspal_ingestion.ingest(1) == 1
+    assert myfitnesspal_sync.ingest(1) == 1
 
     with get_db_connection() as connection:
         entries = connection.execute(
@@ -58,14 +58,14 @@ def test_reingest_replaces_entries_for_the_day(tmp_path, monkeypatch):
         {"name": "Removed food", "calories": 200},
     ])]
     monkeypatch.setattr(
-        myfitnesspal_ingestion,
+        myfitnesspal_sync,
         "hent_mfp_seneste_dage",
         lambda _days: returned_days,
     )
-    myfitnesspal_ingestion.ingest(1)
+    myfitnesspal_sync.ingest(1)
     returned_days[:] = [_diary_day([{"name": "Updated food", "calories": 300}])]
 
-    myfitnesspal_ingestion.ingest(1)
+    myfitnesspal_sync.ingest(1)
 
     with get_db_connection() as connection:
         entries = connection.execute(

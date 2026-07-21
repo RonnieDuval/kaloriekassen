@@ -1,4 +1,4 @@
-"""Database helper utilities for aggregating and transforming data."""
+"""Transform MyFitnessPal diary data into database-ready food entries."""
 import hashlib
 from typing import Any
 

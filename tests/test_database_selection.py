@@ -1,4 +1,4 @@
-from kaloriekassen.database import connection
+from kaloriekassen import db as connection
 
 
 def test_database_type_defaults_to_sqlite_outside_a_container(monkeypatch):

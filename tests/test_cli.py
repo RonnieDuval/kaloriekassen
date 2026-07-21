@@ -18,12 +18,12 @@ def test_intervals_are_ingested_before_google_health_export(monkeypatch, caplog)
 
     monkeypatch.setitem(
         sys.modules,
-        "kaloriekassen.services.intervals_ingestion",
+        "kaloriekassen.intervals.sync",
         SimpleNamespace(ingest=ingest),
     )
     monkeypatch.setitem(
         sys.modules,
-        "kaloriekassen.services.google_health_export",
+        "kaloriekassen.google_health.export",
         SimpleNamespace(export=export),
     )
 

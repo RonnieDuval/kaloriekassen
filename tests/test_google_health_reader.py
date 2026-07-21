@@ -1,13 +1,13 @@
 from unittest.mock import Mock, patch
 
-from kaloriekassen.integrations.google_health.reader import (
+from kaloriekassen.google_health.reader import (
     GOOGLE_HEALTH_NUTRITION_LOG_ENDPOINT,
     fetch_exercises,
     fetch_nutrition_logs,
 )
 
 
-@patch("kaloriekassen.integrations.google_health.reader.requests.get")
+@patch("kaloriekassen.google_health.reader.requests.get")
 def test_fetch_exercises_only_performs_get(request_get):
     response = Mock()
     response.json.return_value = {"dataPoints": [{"name": "exercise/1"}]}
@@ -18,7 +18,7 @@ def test_fetch_exercises_only_performs_get(request_get):
     response.raise_for_status.assert_called_once()
 
 
-@patch("kaloriekassen.integrations.google_health.reader.requests.get")
+@patch("kaloriekassen.google_health.reader.requests.get")
 def test_fetch_nutrition_logs_uses_nutrition_endpoint_and_filter(request_get):
     response = Mock()
     response.json.return_value = {"dataPoints": [{"name": "nutrition-log/1"}]}
@@ -40,7 +40,7 @@ def test_fetch_nutrition_logs_uses_nutrition_endpoint_and_filter(request_get):
     response.raise_for_status.assert_called_once()
 
 
-@patch("kaloriekassen.integrations.google_health.reader.requests.get")
+@patch("kaloriekassen.google_health.reader.requests.get")
 def test_fetch_nutrition_logs_follows_pagination(request_get):
     first_response = Mock()
     first_response.json.return_value = {

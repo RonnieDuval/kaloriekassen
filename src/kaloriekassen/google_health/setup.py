@@ -7,7 +7,7 @@ from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from kaloriekassen.integrations.google_health.auth import _load_client_secrets
+from kaloriekassen.google_health.auth import _client_secrets_path
 
 
 SCOPES = [
@@ -22,18 +22,13 @@ def run_oauth_flow() -> str:
 
     This is used automatically after Google rejects the stored refresh token. It
     can also be invoked explicitly through ``kaloriekassen google-health-auth``.
-    The OAuth client must be configured as a desktop application and permit the
-    local redirect URI used by :meth:`InstalledAppFlow.run_local_server`.
+    The OAuth client must permit the localhost redirect URI used by
+    :meth:`InstalledAppFlow.run_local_server`.
     """
-    client_secrets = _load_client_secrets()
-    client_config = {
-        "installed": {
-            **client_secrets,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }
-    }
-    flow = InstalledAppFlow.from_client_config(client_config, scopes=SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file(
+        str(_client_secrets_path()),
+        scopes=SCOPES,
+    )
     credentials = flow.run_local_server(
         host="localhost",
         port=8080,

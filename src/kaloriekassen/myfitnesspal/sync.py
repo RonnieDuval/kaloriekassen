@@ -1,8 +1,8 @@
 """Ingest MyFitnessPal diary days into the local database."""
 from datetime import datetime, timezone
-from kaloriekassen.database.connection import execute, get_db_connection, json_value
-from kaloriekassen.database.nutrition import meals_to_nutrition_entries
-from kaloriekassen.integrations.myfitnesspal.client import hent_mfp_seneste_dage
+from kaloriekassen.db import execute, get_db_connection, json_value
+from kaloriekassen.myfitnesspal.client import hent_mfp_seneste_dage
+from kaloriekassen.myfitnesspal.transform import meals_to_nutrition_entries
 
 
 def ingest(days_back: int) -> int:

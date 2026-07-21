@@ -14,9 +14,12 @@ from typing import Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
+from dotenv import load_dotenv
 
 import os
 
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

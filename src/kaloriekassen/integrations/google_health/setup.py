@@ -13,6 +13,7 @@ from kaloriekassen.integrations.google_health.auth import _load_client_secrets
 SCOPES = [
     "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
     "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly",
+    "https://www.googleapis.com/auth/googlehealth.nutrition.readonly",
 ]
 
 

@@ -1,66 +1,51 @@
 """Database helper utilities for aggregating and transforming data."""
-from typing import Dict, Any
+import hashlib
+from typing import Any
 
 
-def aggregate_meals_to_totals(meals_detail: Dict[str, list]) -> Dict[str, Any]:
-    """
-    Aggregate meals_detail JSONB structure to daily totals.
-    
-    Input format:
-    {
-        "Breakfast": [
-            {"name": "...", "calories": X, "protein": Y, "carbs": Z, "fat": W, "sodium": S, "sugar": G},
-            ...
-        ],
-        "Lunch": [...],
-        "Dinner": [...],
-        "Snacks": [...]
-    }
-    
-    Returns dict with aggregated totals:
-    {
-        "calories_in": int,
-        "protein": float,
-        "carbs": float,
-        "fat": float,
-        "sodium": int,
-        "sugar": float
-    }
-    """
-    if not meals_detail or not isinstance(meals_detail, dict):
-        return {
-            "calories_in": 0,
-            "protein": 0.0,
-            "carbs": 0.0,
-            "fat": 0.0,
-            "sodium": 0,
-            "sugar": 0.0,
-        }
+def normalize_meal_type(source_meal_name: str) -> str:
+    """Return a small, analysis-friendly meal category."""
+    normalized = source_meal_name.strip().casefold()
+    if normalized in {"breakfast", "morgenmad"}:
+        return "breakfast"
+    if normalized in {"lunch", "frokost"}:
+        return "lunch"
+    if normalized in {"dinner", "aftensmad"}:
+        return "dinner"
+    if "snack" in normalized or normalized == "mellemmåltid":
+        return "snack"
+    return "other"
 
-    totals = {
-        "calories_in": 0,
-        "protein": 0.0,
-        "carbs": 0.0,
-        "fat": 0.0,
-        "sodium": 0,
-        "sugar": 0.0,
-    }
 
-    # Iterate through all meal types
-    for meal_type, foods in meals_detail.items():
+def meals_to_nutrition_entries(date: str, meals_detail: dict[str, list]) -> list[dict[str, Any]]:
+    """Flatten a MyFitnessPal diary day to one row per recorded food."""
+    if not isinstance(meals_detail, dict):
+        return []
+
+    entries: list[dict[str, Any]] = []
+    for source_meal_name, foods in meals_detail.items():
         if not isinstance(foods, list):
             continue
-
-        # Sum metrics from each food in the meal
-        for food in foods:
+        for position, food in enumerate(foods):
             if not isinstance(food, dict):
                 continue
-
-            totals["calories_in"] += int(food.get("calories", 0) or 0)
-            totals["protein"] += float(food.get("protein", 0) or 0)
-            totals["carbs"] += float(food.get("carbohydrates", 0) or 0)  # Note: key is "carbohydrates"
-            totals["fat"] += float(food.get("fat", 0) or 0)
-            totals["sodium"] += int(food.get("sodium", 0) or 0)
-            totals["sugar"] += float(food.get("sugar", 0) or 0)
-
-    return totals
+            source_key = f"{date}\x1f{source_meal_name}\x1f{position}"
+            entries.append(
+                {
+                    "entry_id": hashlib.sha256(source_key.encode()).hexdigest()[:32],
+                    "date": date,
+                    "meal_type": normalize_meal_type(source_meal_name),
+                    "source_meal_name": source_meal_name,
+                    "position": position,
+                    "food_name": str(food.get("name", "")),
+                    "consumed_at": None,
+                    "time_is_estimated": False,
+                    "calories": float(food.get("calories", 0) or 0),
+                    "protein_g": float(food.get("protein", 0) or 0),
+                    "carbs_g": float(food.get("carbohydrates", 0) or 0),
+                    "fat_g": float(food.get("fat", 0) or 0),
+                    "sodium_mg": float(food.get("sodium", 0) or 0),
+                    "sugar_g": float(food.get("sugar", 0) or 0),
+                }
+            )
+    return entries

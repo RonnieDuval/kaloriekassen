@@ -1,4 +1,4 @@
-"""Intervals.icu data fetcher."""
+"""Intervals.icu API client returning raw activities."""
 import datetime as dt
 import json
 import logging

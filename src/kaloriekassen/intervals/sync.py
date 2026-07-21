@@ -1,7 +1,7 @@
 """Ingest individual Intervals activities into the local database."""
 from datetime import datetime, timezone
-from kaloriekassen.database.connection import execute, get_db_connection, json_value
-from kaloriekassen.integrations.intervals.client import IntervalsFetcher
+from kaloriekassen.db import execute, get_db_connection, json_value
+from kaloriekassen.intervals.client import IntervalsFetcher
 
 
 def ingest(days_back: int) -> int:

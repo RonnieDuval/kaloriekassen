@@ -12,27 +12,27 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
     for job in jobs:
         match job:
             case "intervals":
-                from kaloriekassen.services.intervals_ingestion import ingest
+                from kaloriekassen.intervals.sync import ingest
                 stored = ingest(days)
-                logger.info("Intervals: stored %d activities.", stored)
+                logger.info("Intervals: stored %d activities from the last %d days.", stored, days)
 
             case "myfitnesspal":
-                from kaloriekassen.services.myfitnesspal_ingestion import ingest
+                from kaloriekassen.myfitnesspal.sync import ingest
                 stored = ingest(days)
                 logger.info("MyFitnessPal: stored %d diary days.", stored)
 
             case "google-health-export":
-                from kaloriekassen.services.google_health_export import export
+                from kaloriekassen.google_health.export import export
                 attempted = export()
-                logger.info("Google Health: processed %d activities.", attempted)
+                logger.info("Google Health: processed %d unexported activities.", attempted)
 
             case "google-health-auth":
-                from kaloriekassen.integrations.google_health.setup import run_oauth_flow
+                from kaloriekassen.google_health.setup import run_oauth_flow
                 run_oauth_flow()
                 logger.info("Google Health: OAuth completed.")
 
             case "google-health-read":
-                from kaloriekassen.services.google_health_replication import replicate
+                from kaloriekassen.google_health.replication import replicate
                 replicated = replicate()
                 logger.info("Google Health: replicated %d records.", replicated)
 

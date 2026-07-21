@@ -1,8 +1,8 @@
 """Replicate Google Health exercise records locally; never writes to Google."""
 from datetime import datetime, timezone
-from kaloriekassen.database.connection import execute, get_db_connection, json_value
-from kaloriekassen.integrations.google_health.auth import get_credentials
-from kaloriekassen.integrations.google_health.reader import fetch_exercises
+from kaloriekassen.db import execute, get_db_connection, json_value
+from kaloriekassen.google_health.auth import get_credentials
+from kaloriekassen.google_health.reader import fetch_exercises
 
 
 def replicate() -> int:

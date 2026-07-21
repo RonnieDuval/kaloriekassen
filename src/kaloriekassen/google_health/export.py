@@ -1,10 +1,10 @@
 """Export unsent Intervals activities to Google Health."""
 from datetime import datetime, timezone
 import json
-from kaloriekassen.database.connection import execute, get_db_connection, json_value
-from kaloriekassen.integrations.google_health.auth import get_credentials
-from kaloriekassen.integrations.google_health.client import upload_exercise_records
-from kaloriekassen.integrations.google_health.mapper import map_single_activity_to_google_exercise
+from kaloriekassen.db import execute, get_db_connection, json_value
+from kaloriekassen.google_health.auth import get_credentials
+from kaloriekassen.google_health.client import upload_exercise_records
+from kaloriekassen.google_health.mapper import map_single_activity_to_google_exercise
 
 
 def export() -> int:

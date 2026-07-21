@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from kaloriekassen.integrations.google_health.auth import get_credentials
-from kaloriekassen.integrations.google_health.reader import fetch_nutrition_logs
+from kaloriekassen.google_health.auth import get_credentials
+from kaloriekassen.google_health.reader import fetch_nutrition_logs
 
 
 @pytest.mark.integration

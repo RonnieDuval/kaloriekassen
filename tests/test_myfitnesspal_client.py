@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kaloriekassen.integrations.myfitnesspal import client
+from kaloriekassen.myfitnesspal import client
 
 
 def test_parse_food_rows_parses_meals_and_skips_controls():
@@ -40,7 +40,7 @@ def test_hent_mfp_dag_requires_a_manually_created_session(monkeypatch):
         client.hent_mfp_dag("2026-07-20")
 
 
-@patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")
+@patch("kaloriekassen.myfitnesspal.client.requests.get")
 def test_hent_mfp_dag_uses_cookie_header_and_rejects_login_page(request_get, monkeypatch):
     monkeypatch.setenv(client.COOKIE_HEADER_ENV_VAR, "Cookie: user_session=secret")
     response = Mock(url="https://www.myfitnesspal.com/login", text="login")
@@ -63,7 +63,7 @@ def test_cookie_names_excludes_cookie_values():
     ]
 
 
-@patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")
+@patch("kaloriekassen.myfitnesspal.client.requests.get")
 def test_hent_mfp_dag_does_not_treat_a_recaptcha_script_as_a_login_page(request_get, monkeypatch):
     monkeypatch.setenv(client.COOKIE_HEADER_ENV_VAR, "user_session=secret")
     response = Mock(
@@ -81,7 +81,7 @@ def test_hent_mfp_dag_does_not_treat_a_recaptcha_script_as_a_login_page(request_
     assert client.hent_mfp_dag("2026-07-20")["meals"]["Breakfast"][0]["name"] == "Oatmeal"
 
 
-@patch("kaloriekassen.integrations.myfitnesspal.client.requests.get")
+@patch("kaloriekassen.myfitnesspal.client.requests.get")
 def test_hent_mfp_dag_does_not_treat_diary_password_ui_as_a_login_page(request_get, monkeypatch):
     monkeypatch.setenv(client.COOKIE_HEADER_ENV_VAR, "_mfp_session=secret")
     response = Mock(

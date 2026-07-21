@@ -1,4 +1,4 @@
-"""Database selection, connections, and schema setup.
+"""Database selection, connections, schema setup, and migrations.
 
 The default is intentional: a local process uses SQLite, while a container uses
 PostgreSQL. Set ``DB_TYPE`` to ``sqlite`` or ``postgres`` to override it.

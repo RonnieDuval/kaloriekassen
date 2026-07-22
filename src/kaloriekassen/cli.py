@@ -23,7 +23,7 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
 
             case "google-health-export":
                 from kaloriekassen.google_health.export import export
-                attempted = export()
+                attempted = export(days)
                 logger.info("Google Health: processed %d unexported activities.", attempted)
 
             case "google-health-auth":

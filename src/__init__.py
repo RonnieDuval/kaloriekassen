@@ -1,1 +1,0 @@
-"""Kaloriekassen sync package."""

@@ -1,159 +1,92 @@
-# KalorieKassen
+# Kaloriekassen
 
-KalorieKassen synkroniserer data fra flere kilder til PostgreSQL med én råtabel per kilde.
-
-## Kilder
-- **MyFitnessPal** -> `raw_mfp`
-- **Intervals.icu** -> `raw_intervals`
-- **Fitbit** -> `raw_fitbit`
-
-`daily_balance` prioriterer `calories_out` fra Intervals.icu. Hvis der ikke findes data for dagen, bruges Fitbit.
-
-## Kørsel
-```bash
-docker compose up --build
-```
-
-## Kørsel med interval i container
-
-Hvis `run_sync.py` skal køre løbende i en container, kan du bruge `sync_scheduler` servicen i `docker-compose.yml`.
-
-Servicen har **indbyggede defaults** i `docker-compose.yml`:
-
-- `SYNC_TARGETS`: `intervals myfitnesspal fitbit google-health`
-- `SYNC_DAYS`: `7`
-- `SYNC_INTERVAL_SECONDS`: `21600` (6 timer)
-
-Det betyder, at den kan starte uden at du sætter dem i `.env`.
-
-Hvis du vil override defaults, kan du sætte dem i `.env` (valgfrit):
-
-```env
-SYNC_TARGETS=intervals myfitnesspal
-SYNC_DAYS=14
-SYNC_INTERVAL_SECONDS=3600
-```
-
-Start scheduleren:
-
-```bash
-docker compose up --build sync_scheduler
-```
-
-
-Sæt credentials i `docker-compose.yml` eller via miljøvariabler.
-
-## MyFitnessPal - Browser automation via Playwright
-
-MyFitnessPal-data hentes via Playwright-baseret browser automation. Scriptet kopier din lokale Chrome-profil og bruger den til at logge ind automatisk.
-
-### Setup
-
-Sørg for at Chrome er installeret lokalt. Skriptet finder den automatisk fra `~/.config/google-chrome`.
-
-### Brug
-
-Hent data for en enkelt dag:
-
-```bash
-python MYFITNESSPAL/mfp_chatgpt.py 2026-05-13
-```
-
-Hent data for en periode:
-
-```bash
-python MYFITNESSPAL/mfp_chatgpt.py --from 2026-05-01
-```
-
-Hent data for de seneste 7 dage:
-
-```bash
-python MYFITNESSPAL/mfp_chatgpt.py --last-week
-```
-
-Hvis du skal logge ind manuelt, kør med `--visible`:
-
-```bash
-python MYFITNESSPAL/mfp_chatgpt.py --visible 2026-05-13
-```
-
-Browseren åbnes, og du kan logge ind manuelt. Derefter henter scriptet data. Din session gemmes i `temp_chrome_profile/`, så senere kald er automatiske.
-
-## Google Health OAuth setup
-
-Google Health setup er et **interaktivt engangs-flow**. Scriptet åbner Google-login i browseren, du godkender adgangen, og derefter kopierer du `code`-parameteren fra redirect URL'en tilbage i terminalen.
-
-Vi beholder den simple proces, fordi den virker og er nem at fejlsøge. OAuth-consent i browseren kan ikke fjernes helt, fordi Google kræver brugerens login og godkendelse, før der udstedes en authorization code.
-
-### 1. Opret lokal `.env`
-
-Kopiér eksempel-filen og udfyld dine egne værdier:
-
-```bash
-cp .env.example .env
-```
-
-`.env` skal som minimum indeholde:
-
-```env
-GOOGLE_CLIENT_ID=din_client_id
-GOOGLE_CLIENT_SECRET=din_client_secret
-GOOGLE_REDIRECT_URI=https://www.google.com
-# Valgfri: default er secrets/google_oauth_token.json
-GOOGLE_TOKEN_STORE_PATH=secrets/google_oauth_token.json
-```
-
-`GOOGLE_REDIRECT_URI` skal matche en autoriseret redirect URI på OAuth-clienten i Google Cloud Console.
-
-### 2. Hent refresh token første gang
-
-Kør:
-
-```bash
-python GOOGLE_HEALTH_API/setup_google_health.py
-```
-
-Scriptet gør følgende uden at ændre på OAuth-logikken:
-
-1. bygger Google authorization URL ud fra `.env`
-2. åbner URL'en i browseren
-3. du logger ind og godkender adgangen hos Google
-4. Google redirecter til `GOOGLE_REDIRECT_URI` med en URL, der indeholder `code=...`
-5. du kopierer kun værdien fra `code`-parameteren og indsætter den i terminalen
-6. scriptet bytter auth code til tokens og gemmer refresh token lokalt
-
-Eksempel på redirect URL:
+Kaloriekassen er en lokal database for data fra Intervals.icu, MyFitnessPal og
+Google Health. Hver integration har én vej og ét ansvar.
 
 ```text
-https://www.google.com/?code=4/0Ab...xyz&scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness
+Intervals.icu GET  → raw_intervals → Google Health POST
+MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
+Google Health GET  → raw_google_health_exercises
 ```
 
-I eksemplet skal du kopiere værdien mellem `code=` og `&scope`.
+`raw_mfp` stores one untouched diary payload per day. `nutrition_entries`
+contains one row per food, while `nutrition_meal_totals` and
+`daily_nutrition` provide meal and daily totals.
 
-### 3. Daglig brug efter setup
+Google Health-replikaen er read-only: den bruges kun til lokal kontrol og
+differenceanalyse og sendes aldrig til en anden tjeneste.
 
-Når refresh token findes i token-filen, kan koden hente credentials uden nyt browser-login:
+## Kommandoer
 
-```python
-from GOOGLE_HEALTH_API.google_health_access import get_credentials
-
-creds = get_credentials()
+```bash
+uv run kaloriekassen intervals google-health-export --days 7
+uv run kaloriekassen myfitnesspal --days 7
+uv run kaloriekassen google-health-export
+uv run kaloriekassen google-health-read
+uv run kaloriekassen google-health-auth
 ```
 
-`get_credentials()` læser refresh token fra `GOOGLE_TOKEN_STORE_PATH` og refresher access token automatisk, når `refresh_now=True` (default).
+### MyFitnessPal
 
-### Hvis refresh token ikke virker længere
+MyFitnessPal afviser login fra browserautomatisering. Log derfor ind manuelt i
+din almindelige browser, find en godkendt diary-request i browserens DevTools,
+og kopiér dens `Cookie`-header til `.env` som `MFP_COOKIE_HEADER=...`. Både
+værdien alene og formen `Cookie: navn=værdi; ...` accepteres. Headeren er en
+hemmelighed og må ikke commit'es.
 
-Kør setup-scriptet igen og hent en ny auth code, hvis refresh token ikke længere kan bruges. Typiske årsager er:
+En `Cookie`-header kan godt begynde med `euconsent-v2`; den cookie er kun et
+samtykke. Headeren skal også indeholde den aktive login-cookie (den tidligere
+klient ledte efter `user_session`). Kopiér altid headeren fra en **vellykket
+diary-request**, ikke fra login-siden eller cookie-listen. Del aldrig selve
+cookie-værdierne ved fejlsøgning — fejlbeskeden viser kun cookie-navne.
+Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
+den eksisterende session uden at forsøge et automatiseret login. Når sessionen
+udløber, skal headeren kopieres igen efter manuelt login.
 
-- token-filen under `secrets/` er slettet
-- brugeren har fjernet appens adgang i Google Account settings
-- refresh token har ikke været brugt i længere tid
-- OAuth consent screen står som **External / Testing**
-- Google svarer med `invalid_grant` under refresh
+Det første svarer til den tidligere kommando `uv run run_sync.py intervals
+google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
+eksporterede aktiviteter til Google Health. `google-health-read` er en separat,
+read-only replika-kørsel.
 
-### Sikkerhed
+### Google Health OAuth
 
-- Del aldrig `GOOGLE_CLIENT_SECRET` eller refresh token.
-- Commit aldrig `.env` eller indholdet af `secrets/`.
-- Token-filen oprettes med begrænsede filrettigheder (`0600`) hvor operativsystemet understøtter det.
+OAuth bruger to separate filer, som begge skal blive under `secrets/` og aldrig
+committes:
+
+```text
+secrets/google_api_client_secrets.json  # downloadet fra Google Cloud Console
+secrets/google_oauth_token.json         # genereret refresh-token
+```
+
+Proceduren er:
+
+1. Opret en OAuth-klient i Google Cloud Console. En Desktop-klient er enklest
+   til lokal brug; en Web-klient virker også, hvis `http://localhost:8080/` er
+   registreret som redirect-URI.
+2. Download klientens JSON-fil og gem den som
+   `secrets/google_api_client_secrets.json`.
+3. Kør `uv run kaloriekassen google-health-auth` og godkend de ønskede scopes i
+   browseren. Programmet gemmer refresh-tokenet i
+   `secrets/google_oauth_token.json`.
+4. Ved normale kørsler bruger programmet refresh-tokenet til automatisk at
+   hente kortlivede access-tokens. Browserflowet skal kun gentages, hvis tokenet
+   bliver ugyldigt, klienten ændres, eller der tilføjes scopes.
+
+Stierne kan om nødvendigt ændres med `GOOGLE_CLIENT_SECRETS_PATH` og
+`GOOGLE_TOKEN_STORE_PATH` i `.env`. Hvis Google afviser refresh-tokenet med
+`invalid_grant`, starter programmet automatisk OAuth-flowet igen.
+
+Hvis du tidligere har fået `Failed to spawn: kaloriekassen`, så opdatér til en
+version med pakkekonfigurationen her og kør `uv sync` én gang. Derefter virker
+`uv run kaloriekassen ...` også fra PowerShell.
+
+
+## Databasevalg
+
+Databasen vælges automatisk: på din computer bruges SQLite i
+`kaloriekassen.db`; i en container bruges PostgreSQL. Sæt `DB_TYPE=sqlite` eller
+`DB_TYPE=postgres` i `.env` for at overstyre. Docker Compose starter PostgreSQL
+som `db` og sætter automatisk `DB_HOST=db` for sync-containeren.
+
+`google-health-export` eksporterer kun Intervals-aktiviteter, der ikke allerede
+har en succesfuld eksport i `google_health_exports`.

@@ -23,6 +23,19 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+class GoogleOAuthReauthorizationRequired(RuntimeError):
+    """Raised when headless operation requires a new interactive grant."""
+
+
+def _interactive_oauth_enabled() -> bool:
+    value = os.getenv("GOOGLE_OAUTH_INTERACTIVE", "true").strip().casefold()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError("GOOGLE_OAUTH_INTERACTIVE must be true or false")
+
+
 def _token_store_path() -> Path:
     """Return path to local token store file."""
     return Path(os.getenv("GOOGLE_TOKEN_STORE_PATH", "secrets/google_oauth_token.json"))
@@ -108,6 +121,12 @@ def get_credentials(
         try:
             creds.refresh(Request())
         except RefreshError:
+            if not _interactive_oauth_enabled():
+                raise GoogleOAuthReauthorizationRequired(
+                    "Google rejected the stored refresh token. Run "
+                    "'kaloriekassen google-health-auth' on a computer with a "
+                    "browser and replace secrets/google_oauth_token.json."
+                )
             logger.warning(
                 "Google rejected the stored refresh token; starting the OAuth recovery flow."
             )

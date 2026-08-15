@@ -7,6 +7,7 @@ Google Health. Hver integration har én vej og ét ansvar.
 Intervals.icu GET  → raw_intervals → Google Health POST
 MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
 Google Health GET  → raw_google_health_exercises
+Google Health rollup → google_health_daily_activity → daily_energy_summary
 ```
 
 `raw_mfp` gemmer ét urørt dagbogspayload pr. dag. `nutrition_entries` indeholder
@@ -23,6 +24,7 @@ uv run kaloriekassen intervals google-health-export --days 7
 uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
 uv run kaloriekassen google-health-read
+uv run kaloriekassen google-health-daily --days 90
 uv run kaloriekassen google-health-auth
 uv run kaloriekassen status
 ```
@@ -31,6 +33,32 @@ uv run kaloriekassen status
 poster, seneste bekræftede datodækning samt fejlede dage. En tom, men korrekt
 hentet dag registreres særskilt fra en dag, der ikke kunne hentes; manglende
 kostdata bliver derfor ikke fortolket som nul kalorier.
+
+`google-health-daily` henter afsluttede kalenderdage med skridt, aktiv energi og
+Google Healths samlede kalorieforbrug. API-kaldene deles automatisk i perioder,
+der overholder Googles 14-dages grænse for energidata.
+
+## Daglig energimodel
+
+`daily_energy_summary` erstatter det tidligere misvisende `daily_balance`.
+Google Healths `total-calories` bruges som estimeret TDEE, fordi værdien allerede
+indeholder både basal- og aktivitetsforbrug. Træningskalorier fra Intervals og
+estimerede skridtkalorier vises som forklarende datapunkter, men lægges ikke oven
+i TDEE og bliver derfor ikke dobbeltregnet.
+
+Basalforbruget beregnes stabilt med Mifflin–St Jeor ud fra den seneste vægt og
+den lokale profil. Standardprofilen er 114 kg, 185 cm, mand og født 2. september
+1986. Det giver 2.106,25 kcal/dag frem til næste fødselsdag. Når Withings senere
+leverer en nyere vægt, overtager den automatisk standardvægten fra måledatoen.
+
+Viewet viser blandt andet kalorieindtag, afledt basalforbrug, skridt,
+træningskalorier, aktiv energi, TDEE, estimeret energibalance og
+datakomplethed. Skridtkalorier bruger samme højde og vægtgrundlag som BMR.
+
+`body_measurements` er den kanoniske destination for Withings-målinger. Det
+lokale landingslag kan allerede normalisere et Withings `getmeas`-payload med
+vægt, fedtprocent, fedtmasse og fedtfri masse. Selve Withings OAuth-klienten
+kræver først oprettelse af en Withings API-applikation og credentials.
 
 ### MyFitnessPal
 

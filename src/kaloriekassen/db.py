@@ -13,6 +13,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEFAULT_PROFILE = {
+    "profile_id": "default",
+    "height_cm": 185.0,
+    "birth_date": "1986-09-02",
+    "sex_for_bmr": "male",
+    "default_weight_kg": 114.0,
+    "timezone": "Europe/Copenhagen",
+}
+
 SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS raw_intervals (
     activity_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, activity_type TEXT,
@@ -44,6 +53,30 @@ CREATE TABLE IF NOT EXISTS google_health_exports (
     intervals_activity_id TEXT PRIMARY KEY, google_health_id TEXT, request_payload TEXT NOT NULL,
     status TEXT NOT NULL, last_error TEXT, attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sent_at TEXT
 );
+CREATE TABLE IF NOT EXISTS google_health_daily_activity (
+    date TEXT PRIMARY KEY, steps INTEGER, active_energy_kcal REAL,
+    total_energy_kcal REAL, payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS user_profile (
+    profile_id TEXT PRIMARY KEY, height_cm REAL, birth_date TEXT,
+    sex_for_bmr TEXT, default_weight_kg REAL,
+    timezone TEXT NOT NULL DEFAULT 'Europe/Copenhagen',
+    walking_stride_factor REAL NOT NULL DEFAULT 0.415,
+    walking_kcal_per_kg_km REAL NOT NULL DEFAULT 0.5,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS body_measurements (
+    measurement_id TEXT PRIMARY KEY, measured_at TEXT NOT NULL,
+    weight_kg REAL, body_fat_pct REAL, fat_mass_kg REAL,
+    fat_free_mass_kg REAL, source TEXT NOT NULL, source_id TEXT,
+    payload TEXT NOT NULL, fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (source, source_id)
+);
+CREATE INDEX IF NOT EXISTS idx_body_measurements_measured_at
+ON body_measurements(measured_at);
 CREATE TABLE IF NOT EXISTS sync_runs (
     run_id TEXT PRIMARY KEY, job TEXT NOT NULL, source TEXT NOT NULL,
     requested_from TEXT, requested_to TEXT, status TEXT NOT NULL,
@@ -74,16 +107,73 @@ SELECT date, SUM(calories) AS calories_in, SUM(protein_g) AS protein_g,
        SUM(sodium_mg) AS sodium_mg, SUM(sugar_g) AS sugar_g
 FROM nutrition_entries GROUP BY date;
 DROP VIEW IF EXISTS daily_balance;
-CREATE VIEW daily_balance AS
-SELECT r.date, COALESCE(d.calories_in, 0) AS calories_in,
-       COALESCE(i.calories_out, 0) AS calories_out,
-       COALESCE(d.calories_in, 0) - COALESCE(i.calories_out, 0) AS net_balance
-FROM raw_mfp r
-LEFT JOIN daily_nutrition d ON d.date = r.date
-LEFT JOIN (
+DROP VIEW IF EXISTS daily_energy_summary;
+CREATE VIEW daily_energy_summary AS
+WITH dates AS (
+    SELECT date FROM raw_mfp
+    UNION SELECT substr(started_at, 1, 10) FROM raw_intervals
+    UNION SELECT date FROM google_health_daily_activity
+    UNION SELECT substr(measured_at, 1, 10) FROM body_measurements
+), exercise AS (
     SELECT substr(started_at, 1, 10) AS date, SUM(calories_out) AS calories_out
     FROM raw_intervals GROUP BY substr(started_at, 1, 10)
-) i ON i.date = r.date;
+)
+SELECT dates.date,
+       CASE WHEN r.date IS NULL THEN NULL ELSE COALESCE(n.calories_in, 0) END AS calories_in,
+       CASE
+           WHEN COALESCE(b.weight_kg, p.default_weight_kg) IS NOT NULL
+                AND p.height_cm IS NOT NULL
+                AND p.birth_date IS NOT NULL
+                AND p.sex_for_bmr IN ('male', 'female')
+           THEN 10 * COALESCE(b.weight_kg, p.default_weight_kg)
+                + 6.25 * p.height_cm
+                - 5 * (
+                    CAST(substr(dates.date, 1, 4) AS INTEGER)
+                    - CAST(substr(p.birth_date, 1, 4) AS INTEGER)
+                    - CASE
+                        WHEN substr(dates.date, 6, 5) < substr(p.birth_date, 6, 5)
+                        THEN 1 ELSE 0
+                      END
+                  )
+                + CASE WHEN p.sex_for_bmr = 'male' THEN 5 ELSE -161 END
+       END AS basal_energy_kcal,
+       g.steps,
+       CASE
+           WHEN g.steps IS NOT NULL
+                AND COALESCE(b.weight_kg, p.default_weight_kg) IS NOT NULL
+                AND p.height_cm IS NOT NULL
+           THEN g.steps * (p.height_cm / 100.0) * p.walking_stride_factor / 1000.0
+                * COALESCE(b.weight_kg, p.default_weight_kg)
+                * p.walking_kcal_per_kg_km
+       END AS step_energy_estimated_kcal,
+       COALESCE(e.calories_out, 0) AS exercise_energy_kcal,
+       g.active_energy_kcal,
+       g.total_energy_kcal AS estimated_tdee_kcal,
+       CASE
+           WHEN r.date IS NOT NULL AND g.total_energy_kcal IS NOT NULL
+           THEN COALESCE(n.calories_in, 0) - g.total_energy_kcal
+       END AS estimated_energy_balance_kcal,
+       COALESCE(b.weight_kg, p.default_weight_kg) AS weight_kg,
+       b.body_fat_pct,
+       CASE WHEN g.total_energy_kcal IS NOT NULL THEN 'google_total_calories' END AS energy_model,
+       CASE
+           WHEN r.date IS NOT NULL AND g.total_energy_kcal IS NOT NULL THEN 'complete'
+           WHEN r.date IS NULL AND g.total_energy_kcal IS NULL THEN 'missing_intake_and_expenditure'
+           WHEN r.date IS NULL THEN 'missing_intake'
+           ELSE 'missing_expenditure'
+       END AS data_completeness
+FROM dates
+LEFT JOIN raw_mfp r ON r.date = dates.date
+LEFT JOIN daily_nutrition n ON n.date = dates.date
+LEFT JOIN google_health_daily_activity g ON g.date = dates.date
+LEFT JOIN exercise e ON e.date = dates.date
+LEFT JOIN user_profile p ON p.profile_id = 'default'
+LEFT JOIN body_measurements b ON b.measurement_id = (
+    SELECT b2.measurement_id FROM body_measurements b2
+    WHERE substr(b2.measured_at, 1, 10) <= dates.date
+      AND b2.weight_kg IS NOT NULL
+    ORDER BY b2.measured_at DESC LIMIT 1
+);
 """
 
 POSTGRES_SCHEMA = SQLITE_SCHEMA.replace(
@@ -123,6 +213,19 @@ def get_db_type() -> str:
 def _create_sqlite_connection() -> sqlite3.Connection:
     connection = sqlite3.connect(os.getenv("SQLITE_DB_PATH", "kaloriekassen.db"))
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("""CREATE TABLE IF NOT EXISTS user_profile (
+        profile_id TEXT PRIMARY KEY, height_cm REAL, birth_date TEXT,
+        sex_for_bmr TEXT, default_weight_kg REAL,
+        timezone TEXT NOT NULL DEFAULT 'Europe/Copenhagen',
+        walking_stride_factor REAL NOT NULL DEFAULT 0.415,
+        walking_kcal_per_kg_km REAL NOT NULL DEFAULT 0.5,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    profile_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(user_profile)").fetchall()
+    }
+    if "default_weight_kg" not in profile_columns:
+        connection.execute("ALTER TABLE user_profile ADD COLUMN default_weight_kg REAL")
     connection.executescript(SQLITE_SCHEMA)
     existing_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(raw_mfp)").fetchall()
@@ -130,6 +233,21 @@ def _create_sqlite_connection() -> sqlite3.Connection:
     for column in LEGACY_RAW_MFP_TOTAL_COLUMNS:
         if column in existing_columns:
             connection.execute(f"ALTER TABLE raw_mfp DROP COLUMN {column}")
+    connection.execute(
+        """INSERT INTO user_profile
+           (profile_id, height_cm, birth_date, sex_for_bmr, default_weight_kg,
+            timezone, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(profile_id) DO UPDATE SET
+           height_cm=COALESCE(user_profile.height_cm, excluded.height_cm),
+           birth_date=COALESCE(user_profile.birth_date, excluded.birth_date),
+           sex_for_bmr=COALESCE(user_profile.sex_for_bmr, excluded.sex_for_bmr),
+           default_weight_kg=COALESCE(
+               user_profile.default_weight_kg,
+               excluded.default_weight_kg
+           )""",
+        tuple(DEFAULT_PROFILE.values()),
+    )
     return connection
 
 
@@ -142,11 +260,37 @@ def _create_postgres_connection():
         password=os.getenv("DB_PASSWORD", "kalorie"),
     )
     with connection.cursor() as cursor:
+        cursor.execute("""CREATE TABLE IF NOT EXISTS user_profile (
+            profile_id TEXT PRIMARY KEY, height_cm REAL, birth_date TEXT,
+            sex_for_bmr TEXT, default_weight_kg REAL,
+            timezone TEXT NOT NULL DEFAULT 'Europe/Copenhagen',
+            walking_stride_factor REAL NOT NULL DEFAULT 0.415,
+            walking_kcal_per_kg_km REAL NOT NULL DEFAULT 0.5,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        cursor.execute(
+            "ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS default_weight_kg REAL"
+        )
         for statement in POSTGRES_SCHEMA.split(";"):
             if statement.strip():
                 cursor.execute(statement)
         for column in LEGACY_RAW_MFP_TOTAL_COLUMNS:
             cursor.execute(f'ALTER TABLE raw_mfp DROP COLUMN IF EXISTS "{column}"')
+        cursor.execute(
+            """INSERT INTO user_profile
+               (profile_id, height_cm, birth_date, sex_for_bmr,
+                default_weight_kg, timezone, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+               ON CONFLICT(profile_id) DO UPDATE SET
+               height_cm=COALESCE(user_profile.height_cm, excluded.height_cm),
+               birth_date=COALESCE(user_profile.birth_date, excluded.birth_date),
+               sex_for_bmr=COALESCE(user_profile.sex_for_bmr, excluded.sex_for_bmr),
+               default_weight_kg=COALESCE(
+                   user_profile.default_weight_kg,
+                   excluded.default_weight_kg
+               )""",
+            tuple(DEFAULT_PROFILE.values()),
+        )
     connection.commit()
     return connection
 

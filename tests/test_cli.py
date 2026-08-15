@@ -44,3 +44,21 @@ def test_status_reports_when_no_sync_runs_exist(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == (
         "Der er endnu ikke registreret nogen sync-kørsler."
     )
+
+
+def test_google_health_daily_receives_days(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.google_health.daily_replication",
+        SimpleNamespace(replicate_daily=lambda days: calls.append(days) or 7),
+    )
+
+    with caplog.at_level(logging.INFO):
+        cli.run_jobs(["google-health-daily"], days=14)
+
+    assert calls == [14]
+    assert (
+        "Google Health: stored 7 completed daily activity summaries."
+        in caplog.messages
+    )

@@ -10,7 +10,7 @@ src/kaloriekassen/
 ├── google_health/           # API client, auth, mapping and sync flows
 ├── intervals/               # API client and ingestion flow
 ├── myfitnesspal/            # diary client, transformation and ingestion
-└── withings/                # body-measurement transformation and ingestion
+└── withings/                # OAuth, API client, transformation and ingestion
 ```
 
 Code is grouped by external system. A domain owns its client, transformation,

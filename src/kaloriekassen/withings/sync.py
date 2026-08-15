@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from kaloriekassen.db import execute, get_db_connection, json_value
+from kaloriekassen.sync_tracking import (
+    date_range,
+    finish_sync_run,
+    record_coverage,
+    requested_date_range,
+    start_sync_run,
+)
+from kaloriekassen.withings.client import fetch_measurements
 from kaloriekassen.withings.transform import transform_measure_groups
 
 
@@ -48,3 +56,33 @@ def ingest_measure_payload(payload: dict[str, Any]) -> int:
                 ),
             )
     return len(rows)
+
+
+def ingest(days_back: int) -> int:
+    """Fetch and store Withings measurements for the requested date range."""
+    start, end = requested_date_range(days_back)
+    run_id = start_sync_run("withings", "withings", start, end)
+    try:
+        payload = fetch_measurements(start, end)
+        transformed = transform_measure_groups(payload)
+        stored = ingest_measure_payload(payload)
+        counts: dict[date, int] = {day: 0 for day in date_range(start, end)}
+        for row in transformed:
+            measured_day = datetime.fromisoformat(row["measured_at"]).date()
+            if measured_day in counts:
+                counts[measured_day] += 1
+        with get_db_connection() as connection:
+            for day, count in counts.items():
+                record_coverage(
+                    connection,
+                    "withings",
+                    day,
+                    "complete_data" if count else "complete_empty",
+                    count,
+                    run_id,
+                )
+        finish_sync_run(run_id, "success", len(transformed), stored)
+        return stored
+    except Exception as error:
+        finish_sync_run(run_id, "failed", error=error)
+        raise

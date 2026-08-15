@@ -8,6 +8,7 @@ Intervals.icu GET  → raw_intervals → Google Health POST
 MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
 Google Health GET  → raw_google_health_exercises
 Google Health rollup → google_health_daily_activity → daily_energy_summary
+Withings GET       → body_measurements → daily_energy_summary
 ```
 
 `raw_mfp` gemmer ét urørt dagbogspayload pr. dag. `nutrition_entries` indeholder
@@ -26,6 +27,8 @@ uv run kaloriekassen google-health-export
 uv run kaloriekassen google-health-read --days 3
 uv run kaloriekassen google-health-daily --days 90
 uv run kaloriekassen google-health-auth
+uv run kaloriekassen withings --days 30
+uv run kaloriekassen withings-auth
 uv run kaloriekassen status
 ```
 
@@ -55,10 +58,42 @@ Viewet viser blandt andet kalorieindtag, afledt basalforbrug, skridt,
 træningskalorier, aktiv energi, TDEE, estimeret energibalance og
 datakomplethed. Skridtkalorier bruger samme højde og vægtgrundlag som BMR.
 
-`body_measurements` er den kanoniske destination for Withings-målinger. Det
-lokale landingslag kan allerede normalisere et Withings `getmeas`-payload med
-vægt, fedtprocent, fedtmasse og fedtfri masse. Selve Withings OAuth-klienten
-kræver først oprettelse af en Withings API-applikation og credentials.
+`body_measurements` er den kanoniske destination for Withings-målinger. Den
+normaliserer vægt, fedtprocent, fedtmasse og fedtfri masse fra `getmeas`.
+
+### Withings OAuth og synkronisering
+
+Withings kræver en offentlig HTTPS redirect-URL. Den lille Cloudflare Worker i
+`cloudflare/withings-oauth-relay` opfylder kravet og videresender kun det
+kortlivede OAuth-svar til `http://localhost:8081/`. Den gemmer ingen data og
+indeholder ingen credentials. NAS'en er ikke offentligt tilgængelig og henter
+senere selv data direkte fra Withings.
+
+Proceduren er:
+
+1. Opret Worker'en i Cloudflare med koden fra
+   `cloudflare/withings-oauth-relay/src/index.js` og deploy den.
+2. Registrer dens præcise URL hos Withings, inklusive `/oauth/callback`, fx
+   `https://kaloriekassen-withings-oauth.<konto>.workers.dev/oauth/callback`.
+3. Opret `secrets/withings_api_client.json` med de værdier, Withings viser:
+
+   ```json
+   {
+     "client_id": "...",
+     "client_secret": "...",
+     "redirect_uri": "https://kaloriekassen-withings-oauth.<konto>.workers.dev/oauth/callback"
+   }
+   ```
+
+4. Kør `uv run kaloriekassen withings-auth` på den computer, hvor browseren
+   åbnes. Kommandoen gemmer de roterende tokens atomisk i den ignorerede fil
+   `secrets/withings_oauth_token.json`.
+5. Test med `uv run kaloriekassen withings --days 730`. Derefter er en daglig
+   kørsel med fx `--days 7` tilstrækkelig. Access-token fornyes automatisk, og
+   det nye refresh-token erstatter altid det gamle.
+
+Stierne kan ændres med `WITHINGS_CLIENT_SECRETS_PATH` og
+`WITHINGS_TOKEN_STORE_PATH`.
 
 ### MyFitnessPal
 

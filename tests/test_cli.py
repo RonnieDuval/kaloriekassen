@@ -62,3 +62,18 @@ def test_google_health_daily_receives_days(monkeypatch, caplog):
         "Google Health: stored 7 completed daily activity summaries."
         in caplog.messages
     )
+
+
+def test_withings_receives_days(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.sync",
+        SimpleNamespace(ingest=lambda days: calls.append(days) or 2),
+    )
+
+    with caplog.at_level(logging.INFO):
+        cli.run_jobs(["withings"], days=730)
+
+    assert calls == [730]
+    assert "Withings: stored 2 measurement groups." in caplog.messages

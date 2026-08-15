@@ -44,6 +44,16 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                     replicated,
                 )
 
+            case "withings-auth":
+                from kaloriekassen.withings.setup import run_oauth_flow
+                run_oauth_flow()
+                logger.info("Withings: OAuth completed.")
+
+            case "withings":
+                from kaloriekassen.withings.sync import ingest
+                stored = ingest(days)
+                logger.info("Withings: stored %d measurement groups.", stored)
+
             case "status":
                 from kaloriekassen.sync_tracking import format_status_report
                 print(format_status_report())
@@ -65,6 +75,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "google-health-read",
             "google-health-daily",
             "google-health-auth",
+            "withings-auth",
+            "withings",
             "status",
         ],
     )

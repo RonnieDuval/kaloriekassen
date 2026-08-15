@@ -75,7 +75,7 @@ def test_fetch_exercises_only_performs_get(request_get):
     request_get.assert_called_once_with(
         GOOGLE_HEALTH_EXERCISE_ENDPOINT,
         headers={"Authorization": "Bearer token", "Accept": "application/json"},
-        params={"pageSize": 100},
+        params={"pageSize": 25},
         timeout=30,
     )
     response.raise_for_status.assert_called_once()
@@ -116,6 +116,23 @@ def test_fetch_exercises_follows_pagination(request_get):
     )
     first_response.raise_for_status.assert_called_once()
     second_response.raise_for_status.assert_called_once()
+
+
+@patch("kaloriekassen.google_health.reader.requests.get")
+def test_fetch_exercises_passes_date_filter(request_get):
+    response = Mock()
+    response.json.return_value = {"dataPoints": []}
+    request_get.return_value = response
+    filter_expression = (
+        'exercise.interval.civil_start_time >= "2026-08-14T00:00:00" AND '
+        'exercise.interval.civil_start_time < "2026-08-17T00:00:00"'
+    )
+
+    assert fetch_exercises("token", filter_expression=filter_expression) == []
+    assert request_get.call_args.kwargs["params"] == {
+        "pageSize": 25,
+        "filter": filter_expression,
+    }
 
 
 @patch("kaloriekassen.google_health.reader.requests.get")

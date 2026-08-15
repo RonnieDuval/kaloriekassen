@@ -23,7 +23,7 @@ differenceanalyse og sendes aldrig til en anden tjeneste.
 uv run kaloriekassen intervals google-health-export --days 7
 uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
-uv run kaloriekassen google-health-read
+uv run kaloriekassen google-health-read --days 3
 uv run kaloriekassen google-health-daily --days 90
 uv run kaloriekassen google-health-auth
 uv run kaloriekassen status
@@ -79,8 +79,10 @@ udløber, skal headeren kopieres igen efter manuelt login.
 
 Når `intervals` og `google-health-export` angives sammen, hentes Intervals-data
 først, hvorefter endnu ikke eksporterede aktiviteter sendes til Google Health.
-`google-health-read` er en separat, read-only replika-kørsel med pagination
-gennem alle tilgængelige sider.
+`google-health-read` er en separat, read-only replika-kørsel. `--days` filtrerer
+Google Health allerede ved API-kaldet, så en almindelig 3-dages sync ikke
+genhenter hele træningshistorikken. Pagination gennemløber kun siderne inden
+for den valgte periode.
 
 ### Google Health OAuth
 

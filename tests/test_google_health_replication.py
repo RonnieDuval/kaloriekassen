@@ -1,7 +1,14 @@
 from types import SimpleNamespace
+from datetime import date
 
 from kaloriekassen.db import get_db_connection
 from kaloriekassen.google_health import replication
+
+
+class FixedDate(date):
+    @classmethod
+    def today(cls):
+        return cls(2026, 8, 16)
 
 
 def test_replication_tracks_partial_snapshot(tmp_path, monkeypatch):
@@ -10,10 +17,12 @@ def test_replication_tracks_partial_snapshot(tmp_path, monkeypatch):
     monkeypatch.setattr(
         replication, "get_credentials", lambda: SimpleNamespace(token="token")
     )
-    monkeypatch.setattr(
-        replication,
-        "fetch_exercises",
-        lambda _token: [
+    monkeypatch.setattr(replication, "date", FixedDate)
+    received_filters = []
+
+    def fetch(_token, *, filter_expression):
+        received_filters.append(filter_expression)
+        return [
             {
                 "name": "exercise/1",
                 "exercise": {
@@ -25,10 +34,19 @@ def test_replication_tracks_partial_snapshot(tmp_path, monkeypatch):
                 },
             },
             {"exercise": {"exerciseType": "RUNNING"}},
-        ],
+        ]
+
+    monkeypatch.setattr(
+        replication,
+        "fetch_exercises",
+        fetch,
     )
 
-    assert replication.replicate() == 2
+    assert replication.replicate(3) == 2
+    assert received_filters == [
+        'exercise.interval.civil_start_time >= "2026-08-14T00:00:00" '
+        'AND exercise.interval.civil_start_time < "2026-08-17T00:00:00"'
+    ]
 
     with get_db_connection() as connection:
         records = connection.execute(

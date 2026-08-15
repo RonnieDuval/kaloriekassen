@@ -1,15 +1,32 @@
-"""Replicate Google Health exercise records locally; never writes to Google."""
-from datetime import datetime, timezone
+"""Replicate recent Google Health exercise records locally; never writes to Google."""
+from datetime import date, datetime, timedelta, timezone
 from kaloriekassen.db import execute, get_db_connection, json_value
 from kaloriekassen.google_health.auth import get_credentials
 from kaloriekassen.google_health.reader import fetch_exercises
 from kaloriekassen.sync_tracking import finish_sync_run, start_sync_run
 
 
-def replicate() -> int:
-    run_id = start_sync_run("google-health-read", "google-health")
+def replicate(days_back: int = 7) -> int:
+    if days_back < 1:
+        raise ValueError("days_back must be at least 1")
+
+    start_date = date.today() - timedelta(days=days_back - 1)
+    end_date = date.today() + timedelta(days=1)
+    filter_expression = (
+        f'exercise.interval.civil_start_time >= "{start_date.isoformat()}T00:00:00" '
+        f'AND exercise.interval.civil_start_time < "{end_date.isoformat()}T00:00:00"'
+    )
+    run_id = start_sync_run(
+        "google-health-read",
+        "google-health",
+        start_date,
+        date.today(),
+    )
     try:
-        records = fetch_exercises(get_credentials().token)
+        records = fetch_exercises(
+            get_credentials().token,
+            filter_expression=filter_expression,
+        )
         stored_count = 0
         with get_db_connection() as conn:
             for record in records:

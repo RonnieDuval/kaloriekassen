@@ -33,7 +33,7 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
 
             case "google-health-read":
                 from kaloriekassen.google_health.replication import replicate
-                replicated = replicate()
+                replicated = replicate(days)
                 logger.info("Google Health: replicated %d records.", replicated)
 
             case "google-health-daily":

@@ -82,7 +82,11 @@ def fetch_daily_rollups(
         request_body["pageToken"] = page_token
 
 
-def fetch_exercises(access_token: str, page_size: int = 100) -> list[dict[str, Any]]:
+def fetch_exercises(
+    access_token: str,
+    page_size: int = 25,
+    filter_expression: str | None = None,
+) -> list[dict[str, Any]]:
     """Fetch all exercise records from Google Health without changing them."""
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -93,6 +97,8 @@ def fetch_exercises(access_token: str, page_size: int = 100) -> list[dict[str, A
 
     while True:
         params: dict[str, Any] = {"pageSize": page_size}
+        if filter_expression:
+            params["filter"] = filter_expression
         if page_token:
             params["pageToken"] = page_token
 

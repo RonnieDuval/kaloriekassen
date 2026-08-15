@@ -9,9 +9,9 @@ MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
 Google Health GET  → raw_google_health_exercises
 ```
 
-`raw_mfp` stores one untouched diary payload per day. `nutrition_entries`
-contains one row per food, while `nutrition_meal_totals` and
-`daily_nutrition` provide meal and daily totals.
+`raw_mfp` gemmer ét urørt dagbogspayload pr. dag. `nutrition_entries` indeholder
+én række pr. fødevare, mens `nutrition_meal_totals` og `daily_nutrition` viser
+totaler pr. måltid og dag.
 
 Google Health-replikaen er read-only: den bruges kun til lokal kontrol og
 differenceanalyse og sendes aldrig til en anden tjeneste.
@@ -24,7 +24,13 @@ uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
 uv run kaloriekassen google-health-read
 uv run kaloriekassen google-health-auth
+uv run kaloriekassen status
 ```
+
+`status` viser den seneste kørsel for hvert sync-job, antal hentede og gemte
+poster, seneste bekræftede datodækning samt fejlede dage. En tom, men korrekt
+hentet dag registreres særskilt fra en dag, der ikke kunne hentes; manglende
+kostdata bliver derfor ikke fortolket som nul kalorier.
 
 ### MyFitnessPal
 
@@ -43,10 +49,10 @@ Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
 den eksisterende session uden at forsøge et automatiseret login. Når sessionen
 udløber, skal headeren kopieres igen efter manuelt login.
 
-Det første svarer til den tidligere kommando `uv run run_sync.py intervals
-google-health`: Intervals hentes først, og derefter eksporteres endnu ikke
-eksporterede aktiviteter til Google Health. `google-health-read` er en separat,
-read-only replika-kørsel.
+Når `intervals` og `google-health-export` angives sammen, hentes Intervals-data
+først, hvorefter endnu ikke eksporterede aktiviteter sendes til Google Health.
+`google-health-read` er en separat, read-only replika-kørsel med pagination
+gennem alle tilgængelige sider.
 
 ### Google Health OAuth
 
@@ -89,4 +95,5 @@ Databasen vælges automatisk: på din computer bruges SQLite i
 som `db` og sætter automatisk `DB_HOST=db` for sync-containeren.
 
 `google-health-export` eksporterer kun Intervals-aktiviteter, der ikke allerede
-har en succesfuld eksport i `google_health_exports`.
+har en succesfuld eksport i `google_health_exports`. Ved nye uploads gemmes det
+returnerede Google Health-ID sammen med status og det præcise request-payload.

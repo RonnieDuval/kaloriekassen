@@ -1,10 +1,15 @@
 """Map Intervals.icu activities to Google Health exercise records."""
 import datetime as dt
 import logging
+import os
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEZONE = "Europe/Copenhagen"
+DEFAULT_TIMEZONE_ENV_VAR = "GOOGLE_HEALTH_DEFAULT_TIMEZONE"
 
 EXERCISE_TYPE_MAP = {
     "VirtualRide": "BIKING",
@@ -34,36 +39,68 @@ def map_exercise_type(intervals_type: str | None) -> str:
     return exercise_type
 
 
-def _offset_strings(utc_offset_seconds: int) -> tuple[str, str]:
-    """Return RFC 3339 and protobuf-duration representations of an offset."""
-    sign = "+" if utc_offset_seconds >= 0 else "-"
-    absolute_seconds = abs(utc_offset_seconds)
-    hours, remainder = divmod(absolute_seconds, 3600)
-    minutes = remainder // 60
-    return f"{sign}{hours:02d}:{minutes:02d}", f"{utc_offset_seconds}s"
+def _timezone_for_activity(activity: dict[str, Any]) -> ZoneInfo:
+    """Return the activity timezone or the configured IANA fallback timezone."""
+    timezone_name = str(activity.get("timezone") or "").strip()
+    if not timezone_name:
+        timezone_name = os.getenv(
+            DEFAULT_TIMEZONE_ENV_VAR,
+            DEFAULT_TIMEZONE,
+        ).strip() or DEFAULT_TIMEZONE
+        logger.warning(
+            "Activity %r has no timezone; using fallback %s.",
+            activity.get("id") or activity.get("activity_id") or activity.get("start_date"),
+            timezone_name,
+        )
+
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as error:
+        raise ValueError(f"Unknown IANA timezone: {timezone_name!r}") from error
 
 
-def map_single_activity_to_google_exercise(
-    activity: dict[str, Any],
-    utc_offset_seconds: int = 7200,
-) -> dict[str, Any]:
-    """Convert one raw Intervals.icu activity to a Google Health data point."""
-    start_date = activity.get("start_date_local")
-    if start_date:
-        start = dt.datetime.fromisoformat(start_date[:19])
+def _activity_start(activity: dict[str, Any], timezone: ZoneInfo) -> dt.datetime:
+    """Return an aware local start time, preferring the absolute UTC timestamp."""
+    absolute_start = activity.get("start_date")
+    if absolute_start:
+        start = dt.datetime.fromisoformat(str(absolute_start).replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            logger.warning("Activity start_date %r has no UTC offset; assuming UTC.", absolute_start)
+            start = start.replace(tzinfo=dt.timezone.utc)
+        return start.astimezone(timezone)
+
+    local_start = activity.get("start_date_local")
+    if local_start:
+        logger.warning(
+            "Activity %r has no absolute start_date; interpreting start_date_local in %s.",
+            activity.get("id") or activity.get("activity_id") or local_start,
+            timezone.key,
+        )
+        start = dt.datetime.fromisoformat(str(local_start))
+        return start.astimezone(timezone) if start.tzinfo else start.replace(tzinfo=timezone)
+
+    date_value = activity.get("date")
+    if isinstance(date_value, str):
+        date = dt.date.fromisoformat(date_value)
+    elif isinstance(date_value, dt.date):
+        date = date_value
     else:
-        date_value = activity.get("date")
-        if isinstance(date_value, str):
-            date = dt.date.fromisoformat(date_value)
-        elif isinstance(date_value, dt.date):
-            date = date_value
-        else:
-            date = dt.date.today()
-        start = dt.datetime.combine(date, dt.time())
+        date = dt.date.today()
+    logger.warning("Activity has no start time; using midnight on %s in %s.", date, timezone.key)
+    return dt.datetime.combine(date, dt.time(), tzinfo=timezone)
 
+
+def map_single_activity_to_google_exercise(activity: dict[str, Any]) -> dict[str, Any]:
+    """Convert one raw Intervals.icu activity to a Google Health data point."""
+    timezone = _timezone_for_activity(activity)
+    start = _activity_start(activity, timezone)
     elapsed_seconds = int(activity.get("elapsed_time", 0) or 0)
-    end = start + dt.timedelta(seconds=max(elapsed_seconds, 1))
-    rfc3339_offset, duration_offset = _offset_strings(utc_offset_seconds)
+    end = (
+        start.astimezone(dt.timezone.utc)
+        + dt.timedelta(seconds=max(elapsed_seconds, 1))
+    ).astimezone(timezone)
+    start_offset = int(start.utcoffset().total_seconds())
+    end_offset = int(end.utcoffset().total_seconds())
 
     distance_meters = float(activity.get("distance", 0) or 0)
     elevation_meters = float(activity.get("total_elevation_gain", 0) or 0)
@@ -75,10 +112,10 @@ def map_single_activity_to_google_exercise(
 
     exercise: dict[str, Any] = {
         "interval": {
-            "startTime": f"{start.isoformat()}{rfc3339_offset}",
-            "startUtcOffset": duration_offset,
-            "endTime": f"{end.isoformat()}{rfc3339_offset}",
-            "endUtcOffset": duration_offset,
+            "startTime": start.isoformat(),
+            "startUtcOffset": f"{start_offset}s",
+            "endTime": end.isoformat(),
+            "endUtcOffset": f"{end_offset}s",
         },
         "exerciseType": exercise_type,
         "metricsSummary": {

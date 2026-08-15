@@ -10,14 +10,32 @@ GOOGLE_HEALTH_NUTRITION_LOG_ENDPOINT = (
 
 
 def fetch_exercises(access_token: str, page_size: int = 100) -> list[dict[str, Any]]:
-    """Fetch exercise records from Google Health without changing remote data."""
-    response = requests.get(
-        GOOGLE_HEALTH_EXERCISE_ENDPOINT,
-        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-        params={"pageSize": page_size}, timeout=30,
-    )
-    response.raise_for_status()
-    return response.json().get("dataPoints", [])
+    """Fetch all exercise records from Google Health without changing them."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+    page_token: str | None = None
+    records: list[dict[str, Any]] = []
+
+    while True:
+        params: dict[str, Any] = {"pageSize": page_size}
+        if page_token:
+            params["pageToken"] = page_token
+
+        response = requests.get(
+            GOOGLE_HEALTH_EXERCISE_ENDPOINT,
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        records.extend(payload.get("dataPoints", []))
+
+        page_token = payload.get("nextPageToken")
+        if not page_token:
+            return records
 
 
 def fetch_nutrition_logs(

@@ -33,7 +33,7 @@ def upload_exercise_records(
     Returns:
         Dictionary with upload results:
         {
-            "successful": List[date],
+            "successful": List[{"date": date, "google_health_id": str}],
             "failed": List[{"date": date, "error": str}],
             "total": int
         }
@@ -78,10 +78,11 @@ def upload_exercise_records(
             # Handle successful responses
             if response.status_code in [200, 201]:
                 response_data = response.json()
-                data_point_name = response_data.get("name", "unknown")
-                results["successful"].append(
-                    extract_date_from_datapoint(data_point)
-                )
+                data_point_name = response_data.get("name")
+                results["successful"].append({
+                    "date": extract_date_from_datapoint(data_point),
+                    "google_health_id": data_point_name,
+                })
                 logger.debug(f"Successfully uploaded: {data_point_name}")
 
             # Handle other errors

@@ -6,6 +6,7 @@
 src/kaloriekassen/
 ├── cli.py                   # command-line entry point
 ├── db.py                    # connections, schema and migrations
+├── sync_tracking.py         # run history, date coverage and status reporting
 ├── google_health/           # API client, auth, mapping and sync flows
 ├── intervals/               # API client and ingestion flow
 └── myfitnesspal/            # diary client, transformation and ingestion
@@ -26,9 +27,16 @@ technical layers.
 | `daily_nutrition` | Daily nutrition totals | derived view |
 | `raw_google_health_exercises` | Google Health exercise replica | API → database, read-only |
 | `google_health_exports` | Intervals export audit | database → Google Health |
+| `sync_runs` | Operational history for every sync job | derived locally |
+| `sync_coverage` | Per-source date coverage and missing-data state | derived locally |
 
 Raw tables retain full source payloads. Google Health reads and uploads are
 separate flows; the read replica is never an upload source.
+
+Every operational sync creates a `sync_runs` row with `running`, `success`,
+`partial`, or `failed` status. Intervals and MyFitnessPal also update
+`sync_coverage` for every requested date. Coverage distinguishes verified days
+with data, verified empty days, and failed days.
 
 ## Database backend
 

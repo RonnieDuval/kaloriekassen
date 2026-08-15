@@ -116,7 +116,14 @@ def _has_diary_table(page_html: str) -> bool:
 
 
 def hent_mfp_dag(dato_streng: str) -> dict:
-    """Fetch one diary date without attempting an automated MyFitnessPal login."""
+    """Hent én dagbogsdag med en manuelt oprettet browsersession.
+
+    MyFitnessPal blokerer automatiseret login, og der findes i øjeblikket ingen
+    praktisk alternativ adgang til disse dagbogsdata. Kravet om
+    ``MFP_COOKIE_HEADER`` er derfor et bevidst integrationsvilkår og ikke en
+    midlertidig nødløsning. Cookien skal lejlighedsvis fornyes, når
+    browsersessionen udløber.
+    """
     cookie_header = _cookie_header()
     response = requests.get(
         DIARY_URL.format(date=dato_streng),

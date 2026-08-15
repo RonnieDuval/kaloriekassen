@@ -1,6 +1,7 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from kaloriekassen.google_health.reader import (
+    GOOGLE_HEALTH_EXERCISE_ENDPOINT,
     GOOGLE_HEALTH_NUTRITION_LOG_ENDPOINT,
     fetch_exercises,
     fetch_nutrition_logs,
@@ -14,8 +15,50 @@ def test_fetch_exercises_only_performs_get(request_get):
     request_get.return_value = response
 
     assert fetch_exercises("token") == [{"name": "exercise/1"}]
-    request_get.assert_called_once()
+    request_get.assert_called_once_with(
+        GOOGLE_HEALTH_EXERCISE_ENDPOINT,
+        headers={"Authorization": "Bearer token", "Accept": "application/json"},
+        params={"pageSize": 100},
+        timeout=30,
+    )
     response.raise_for_status.assert_called_once()
+
+
+@patch("kaloriekassen.google_health.reader.requests.get")
+def test_fetch_exercises_follows_pagination(request_get):
+    first_response = Mock()
+    first_response.json.return_value = {
+        "dataPoints": [{"name": "exercise/1"}],
+        "nextPageToken": "next-page",
+    }
+    second_response = Mock()
+    second_response.json.return_value = {
+        "dataPoints": [{"name": "exercise/2"}],
+    }
+    request_get.side_effect = [first_response, second_response]
+
+    assert fetch_exercises("token", page_size=50) == [
+        {"name": "exercise/1"},
+        {"name": "exercise/2"},
+    ]
+    request_get.assert_has_calls(
+        [
+            call(
+                GOOGLE_HEALTH_EXERCISE_ENDPOINT,
+                headers={"Authorization": "Bearer token", "Accept": "application/json"},
+                params={"pageSize": 50},
+                timeout=30,
+            ),
+            call(
+                GOOGLE_HEALTH_EXERCISE_ENDPOINT,
+                headers={"Authorization": "Bearer token", "Accept": "application/json"},
+                params={"pageSize": 50, "pageToken": "next-page"},
+                timeout=30,
+            ),
+        ]
+    )
+    first_response.raise_for_status.assert_called_once()
+    second_response.raise_for_status.assert_called_once()
 
 
 @patch("kaloriekassen.google_health.reader.requests.get")

@@ -33,3 +33,14 @@ def test_intervals_are_ingested_before_google_health_export(monkeypatch, caplog)
     assert calls == [("intervals", 7), ("google-health-export", 7)]
     assert "Intervals: stored 3 activities from the last 7 days." in caplog.messages
     assert "Google Health: processed 2 unexported activities." in caplog.messages
+
+
+def test_status_reports_when_no_sync_runs_exist(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DB_TYPE", "sqlite")
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "status.db"))
+
+    cli.run_jobs(["status"], days=7)
+
+    assert capsys.readouterr().out.strip() == (
+        "Der er endnu ikke registreret nogen sync-kørsler."
+    )

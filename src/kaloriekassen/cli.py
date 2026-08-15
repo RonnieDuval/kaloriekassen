@@ -36,6 +36,10 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                 replicated = replicate()
                 logger.info("Google Health: replicated %d records.", replicated)
 
+            case "status":
+                from kaloriekassen.sync_tracking import format_status_report
+                print(format_status_report())
+
             case _:
                 # Wildcard: fanger alt, der ikke matchede de andre cases
                 raise ValueError(f"Ukendt job modtaget: {job}")
@@ -43,7 +47,7 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="kaloriekassen")
-    parser.add_argument("jobs", nargs="+", choices=["intervals", "myfitnesspal", "google-health-export", "google-health-read", "google-health-auth"])
+    parser.add_argument("jobs", nargs="+", choices=["intervals", "myfitnesspal", "google-health-export", "google-health-read", "google-health-auth", "status"])
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

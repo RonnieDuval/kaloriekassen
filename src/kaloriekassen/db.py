@@ -44,6 +44,23 @@ CREATE TABLE IF NOT EXISTS google_health_exports (
     intervals_activity_id TEXT PRIMARY KEY, google_health_id TEXT, request_payload TEXT NOT NULL,
     status TEXT NOT NULL, last_error TEXT, attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sent_at TEXT
 );
+CREATE TABLE IF NOT EXISTS sync_runs (
+    run_id TEXT PRIMARY KEY, job TEXT NOT NULL, source TEXT NOT NULL,
+    requested_from TEXT, requested_to TEXT, status TEXT NOT NULL,
+    fetched_count INTEGER NOT NULL DEFAULT 0, stored_count INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL, completed_at TEXT, error_type TEXT, error_message TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sync_runs_job_started
+ON sync_runs(job, started_at);
+CREATE TABLE IF NOT EXISTS sync_coverage (
+    source TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL,
+    record_count INTEGER NOT NULL DEFAULT 0, last_successful_run_id TEXT,
+    checked_at TEXT NOT NULL,
+    PRIMARY KEY (source, date),
+    FOREIGN KEY (last_successful_run_id) REFERENCES sync_runs(run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sync_coverage_source_status_date
+ON sync_coverage(source, status, date);
 CREATE VIEW IF NOT EXISTS nutrition_meal_totals AS
 SELECT date, meal_type, source_meal_name, COUNT(*) AS food_count,
        SUM(calories) AS calories, SUM(protein_g) AS protein_g,

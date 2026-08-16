@@ -55,6 +55,14 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                     replicated,
                 )
 
+            case "google-health-today":
+                from kaloriekassen.google_health.daily_replication import replicate_today
+                replicated = replicate_today()
+                logger.info(
+                    "Google Health: stored %d provisional daily activity summaries.",
+                    replicated,
+                )
+
             case "google-health-heart-rate-backfill":
                 from kaloriekassen.google_health.heart_rate_backfill import (
                     backfill_average_heart_rate,
@@ -109,6 +117,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "google-health-export",
             "google-health-read",
             "google-health-daily",
+            "google-health-today",
             "google-health-auth",
             "google-health-heart-rate-backfill",
             "withings-auth",

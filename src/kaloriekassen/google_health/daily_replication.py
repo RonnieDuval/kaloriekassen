@@ -1,4 +1,4 @@
-"""Replicate completed-day activity and energy rollups from Google Health."""
+"""Replicate activity and energy rollups from Google Health."""
 
 from __future__ import annotations
 
@@ -61,17 +61,16 @@ def _fetch_rollups(
     return by_date, fetched_count
 
 
-def replicate_daily(days_back: int = 7) -> int:
-    """Store daily Google steps and energy for the latest completed days."""
-    if days_back < 1:
-        raise ValueError("days_back must be at least 1")
-
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days_back)
-    requested_to = end_date - timedelta(days=1)
+def _replicate_range(
+    job: str,
+    source: str,
+    start_date: date,
+    requested_to: date,
+) -> int:
+    """Store Google rollups for an inclusive civil-date range."""
     run_id = start_sync_run(
-        "google-health-daily",
-        "google-health-daily",
+        job,
+        source,
         start_date,
         requested_to,
     )
@@ -82,7 +81,7 @@ def replicate_daily(days_back: int = 7) -> int:
         records_by_date, fetched_count = _fetch_rollups(
             get_credentials().token,
             start_date,
-            end_date,
+            requested_to + timedelta(days=1),
         )
         now = datetime.now(timezone.utc).isoformat()
         with get_db_connection() as connection:
@@ -131,7 +130,7 @@ def replicate_daily(days_back: int = 7) -> int:
 
                 record_coverage(
                     connection,
-                    "google-health-daily",
+                    source,
                     day,
                     "complete_data" if available_values else "complete_empty",
                     available_values,
@@ -154,3 +153,28 @@ def replicate_daily(days_back: int = 7) -> int:
             error=error,
         )
         raise
+
+
+def replicate_daily(days_back: int = 7) -> int:
+    """Store Google steps and energy for the latest completed days."""
+    if days_back < 1:
+        raise ValueError("days_back must be at least 1")
+
+    today = date.today()
+    return _replicate_range(
+        "google-health-daily",
+        "google-health-daily",
+        today - timedelta(days=days_back),
+        today - timedelta(days=1),
+    )
+
+
+def replicate_today() -> int:
+    """Store a replaceable, provisional snapshot for the current civil day."""
+    today = date.today()
+    return _replicate_range(
+        "google-health-today",
+        "google-health-today",
+        today,
+        today,
+    )

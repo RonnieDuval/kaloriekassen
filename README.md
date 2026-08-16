@@ -75,6 +75,9 @@ SYNC_DAYS=7
 INTERVALS_SYNC_MINUTES=30
 MFP_SYNC_HOURS=3
 GOOGLE_HEALTH_READ_HOURS=6
+GOOGLE_HEALTH_DAILY_HOURS=6
+GOOGLE_HEALTH_TODAY_MINUTES=15
+WITHINGS_SYNC_HOURS=6
 ```
 
 NAS'ens secrets-mappe bind-mountes som `/app/secrets` i containeren og skal
@@ -102,9 +105,11 @@ tokens efter syv dage. En privat app kan sættes til `In production` uden at
 offentliggøre kildekode, NAS eller sundhedsdata; det fjerner testtilstandens
 syv-dagesudløb. Se [Googles officielle vejledning](https://developers.google.com/health/setup).
 
+`google-health-today` henter foreløbige tal for indeværende dag hvert 15. minut.
 `google-health-daily` henter afsluttede kalenderdage med skridt, aktiv energi og
-Google Healths samlede kalorieforbrug. API-kaldene deles automatisk i perioder,
-der overholder Googles 14-dages grænse for energidata.
+Google Healths samlede kalorieforbrug hver 6. time. Begge jobs overskriver dagens
+snapshot, så de foreløbige tal automatisk erstattes af de afsluttede. API-kaldene
+deles automatisk i perioder, der overholder Googles 14-dages grænse for energidata.
 
 ## Daglig energimodel
 

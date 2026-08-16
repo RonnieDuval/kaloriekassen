@@ -118,3 +118,60 @@ def test_replicates_daily_energy_and_builds_energy_summary(tmp_path, monkeypatch
         "complete",
     )
     assert coverage == ("complete_data", 3)
+
+
+def test_replicates_current_day_as_a_separate_provisional_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_TYPE", "sqlite")
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "today-energy.db"))
+    monkeypatch.setattr(daily_replication, "date", FixedDate)
+    monkeypatch.setattr(
+        daily_replication,
+        "get_credentials",
+        lambda: SimpleNamespace(token="token"),
+    )
+    records = {
+        FixedDate(2026, 8, 15): {
+            "steps": _rollup(15, "steps", {"countSum": "1234"}),
+            "active-energy-burned": _rollup(
+                15,
+                "activeEnergyBurned",
+                {"kcalSum": 250},
+            ),
+            "total-calories": _rollup(
+                15,
+                "totalCalories",
+                {"kcalSum": 1600},
+            ),
+        }
+    }
+    requested_ranges = []
+
+    def fetch(_token, start, end):
+        requested_ranges.append((start, end))
+        return records, 3
+
+    monkeypatch.setattr(daily_replication, "_fetch_rollups", fetch)
+
+    assert daily_replication.replicate_today() == 1
+
+    with get_db_connection() as connection:
+        activity = connection.execute(
+            """SELECT steps, active_energy_kcal, total_energy_kcal
+               FROM google_health_daily_activity WHERE date = '2026-08-15'"""
+        ).fetchone()
+        run = connection.execute(
+            """SELECT job, source, requested_from, requested_to, status
+               FROM sync_runs ORDER BY started_at DESC LIMIT 1"""
+        ).fetchone()
+
+    assert requested_ranges == [
+        (FixedDate(2026, 8, 15), FixedDate(2026, 8, 16))
+    ]
+    assert activity == (1234, 250.0, 1600.0)
+    assert run == (
+        "google-health-today",
+        "google-health-today",
+        "2026-08-15",
+        "2026-08-15",
+        "success",
+    )

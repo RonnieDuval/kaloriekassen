@@ -62,6 +62,13 @@ def _run_google_health_daily(days: int) -> None:
     logger.info("Google Health scheduler: stored %d daily summaries.", stored)
 
 
+def _run_google_health_today() -> None:
+    from kaloriekassen.google_health.daily_replication import replicate_today
+
+    stored = replicate_today()
+    logger.info("Google Health scheduler: stored %d provisional daily summaries.", stored)
+
+
 def _run_withings_sync(days: int) -> None:
     from kaloriekassen.withings.sync import ingest
 
@@ -75,6 +82,7 @@ def build_schedule(fallback_days: int = 7) -> list[ScheduledJob]:
     mfp_hours = _positive_int_env("MFP_SYNC_HOURS", 3)
     google_read_hours = _positive_int_env("GOOGLE_HEALTH_READ_HOURS", 6)
     google_daily_hours = _positive_int_env("GOOGLE_HEALTH_DAILY_HOURS", 6)
+    google_today_minutes = _positive_int_env("GOOGLE_HEALTH_TODAY_MINUTES", 15)
     withings_hours = _positive_int_env("WITHINGS_SYNC_HOURS", 6)
     return [
         ScheduledJob(
@@ -96,6 +104,11 @@ def build_schedule(fallback_days: int = 7) -> list[ScheduledJob]:
             "google-health-daily",
             google_daily_hours * 3600,
             lambda: _run_google_health_daily(days),
+        ),
+        ScheduledJob(
+            "google-health-today",
+            google_today_minutes * 60,
+            _run_google_health_today,
         ),
         ScheduledJob(
             "withings",

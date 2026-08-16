@@ -65,6 +65,24 @@ def test_google_health_daily_receives_days(monkeypatch, caplog):
     )
 
 
+def test_google_health_today_runs_provisional_sync(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.google_health.daily_replication",
+        SimpleNamespace(replicate_today=lambda: calls.append("today") or 1),
+    )
+
+    with caplog.at_level(logging.INFO):
+        cli.run_jobs(["google-health-today"], days=7)
+
+    assert calls == ["today"]
+    assert (
+        "Google Health: stored 1 provisional daily activity summaries."
+        in caplog.messages
+    )
+
+
 def test_withings_receives_days(monkeypatch, caplog):
     calls = []
     monkeypatch.setitem(

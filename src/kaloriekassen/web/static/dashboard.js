@@ -83,16 +83,16 @@ function renderMetrics(day, measurement) {
   el("metric-intake").textContent = number(day?.calories_in, " kcal");
   el("metric-tdee").textContent = number(day?.estimated_tdee_kcal, " kcal");
   el("metric-tdee-note").textContent = missingGoogleDaily
-    ? (isCurrentDay ? "Kommer efter næste afsluttede dagssynk" : "Google-dagssum mangler")
-    : "Google totalenergi";
+    ? (isCurrentDay ? "Afventer næste 15-minutters synk" : "Google-dagssum mangler")
+    : (isCurrentDay ? "Foreløbig Google totalenergi" : "Google totalenergi");
   el("metric-bmr").textContent = number(day?.basal_energy_kcal, " kcal");
   el("metric-steps").textContent = number(day?.steps);
   el("metric-step-energy").textContent = day?.steps == null
-    ? (isCurrentDay ? "Kommer efter næste afsluttede dagssynk" : "Google-dagssum mangler")
-    : `${number(day.step_energy_estimated_kcal, " kcal")} estimeret`;
+    ? (isCurrentDay ? "Afventer næste 15-minutters synk" : "Google-dagssum mangler")
+    : `${number(day.step_energy_estimated_kcal, " kcal")} estimeret${isCurrentDay ? " · foreløbig" : ""}`;
   el("metric-balance-note").textContent = balance == null
-    ? (isCurrentDay ? "Beregnes, når dagens TDEE er klar" : "Kan ikke beregnes uden TDEE")
-    : "Indtag minus TDEE";
+    ? (isCurrentDay ? "Beregnes ved næste 15-minutters synk" : "Kan ikke beregnes uden TDEE")
+    : (isCurrentDay ? "Foreløbig: indtag minus TDEE" : "Indtag minus TDEE");
   el("metric-exercise").textContent = number(day?.exercise_energy_kcal, " kcal");
 
   const weight = day?.weight_kg ?? measurement?.weight_kg;
@@ -106,18 +106,21 @@ function renderMetrics(day, measurement) {
     el("selected-date-heading").textContent = formatDate(day.date, longDateFormat);
     const dayState = el("day-state");
     dayState.hidden = false;
-    dayState.className = `day-state ${day.data_completeness === "complete" ? "complete" : "partial"}`;
-    dayState.textContent = day.data_completeness === "complete"
-      ? "Komplet dag"
-      : (isCurrentDay ? "Dagen er i gang" : "Ufuldstændig dag");
+    const isComplete = day.data_completeness === "complete" && !isCurrentDay;
+    dayState.className = `day-state ${isComplete ? "complete" : "partial"}`;
+    dayState.textContent = isCurrentDay
+      ? "Foreløbige tal"
+      : (isComplete ? "Komplet dag" : "Ufuldstændig dag");
     const completeness = {
       complete: "Kost og energiforbrug er komplette for dagen.",
       missing_intake: "Kalorieindtag mangler for dagen.",
       missing_expenditure: "Energiforbrug mangler for dagen.",
       missing_intake_and_expenditure: "Kost og energiforbrug mangler for dagen.",
     };
-    el("completeness-copy").textContent = isCurrentDay && missingGoogleDaily
-      ? "Google leverer skridt og TDEE for afsluttede dage. Energibalancen kommer efter næste dagssynkronisering."
+    el("completeness-copy").textContent = isCurrentDay
+      ? (missingGoogleDaily
+        ? "Afventer dagens første Google-snapshot. Derefter opdateres skridt, TDEE og energibalance hvert 15. minut."
+        : "Skridt, TDEE og energibalance er foreløbige og opdateres fra Google hvert 15. minut.")
       : (completeness[day.data_completeness]
         || "Samler kost, bevægelse, træning og kropsmålinger.");
   }
@@ -242,6 +245,7 @@ function renderSyncJobs(jobs) {
     myfitnesspal: ["Hver 3. time", "Mad og kalorieindtag"],
     "google-health-read": ["Hver 6. time", "Kopi af Google-træninger"],
     "google-health-daily": ["Hver 6. time", "Skridt, aktiv energi og TDEE for afsluttede dage"],
+    "google-health-today": ["Hvert 15. minut", "Foreløbige skridt, aktiv energi og TDEE for i dag"],
     withings: ["Hver 6. time", "Vægt og kropssammensætning"],
     "google-health-export": ["Med Intervals hvert 30. minut", "Nye Intervals-træninger til Google"],
     "google-health-heart-rate-backfill": ["Engangskørsel", "Historisk gennemsnitspuls"],

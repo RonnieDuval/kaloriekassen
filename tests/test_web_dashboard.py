@@ -72,7 +72,8 @@ def test_dashboard_page_and_static_assets_are_served():
     assert script.status_code == 200
     assert "loadDashboard" in script.text
     assert "Synkronisering OK" in script.text
-    assert "Google leverer skridt og TDEE for afsluttede dage" in script.text
+    assert "opdateres fra Google hvert 15. minut" in script.text
+    assert '"google-health-today": ["Hvert 15. minut"' in script.text
 
 
 def test_dashboard_api_returns_derived_energy_data():

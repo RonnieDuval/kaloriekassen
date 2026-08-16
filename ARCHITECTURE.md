@@ -8,6 +8,7 @@ src/kaloriekassen/
 ├── db.py                    # connections, schema and migrations
 ├── scheduler.py             # long-running, sequential NAS scheduler
 ├── sync_tracking.py         # run history, date coverage and status reporting
+├── web/                     # read-only FastAPI dashboard, templates and assets
 ├── google_health/           # API client, auth, mapping and sync flows
 ├── intervals/               # API client and ingestion flow
 ├── myfitnesspal/            # diary client, transformation and ingestion
@@ -44,10 +45,13 @@ Every operational sync creates a `sync_runs` row with `running`, `success`,
 `sync_coverage` for every requested date. Coverage distinguishes verified days
 with data, verified empty days, and failed days.
 
-## NAS scheduling
+## NAS services
 
-Docker Compose runs PostgreSQL and one long-lived scheduler container. The
-scheduler executes jobs sequentially, immediately at startup and then at
+Docker Compose runs PostgreSQL, one long-lived scheduler container and one
+read-only web container. The dashboard renders server-hosted HTML and static
+assets, exposes small JSON endpoints and reads the existing analytical views;
+it does not introduce another data model. The scheduler executes jobs
+sequentially, immediately at startup and then at
 environment-configured intervals. Intervals ingestion and Google Health export
 form one ordered job; MyFitnessPal ingestion and the Google Health read replica
 have independent intervals. A failed job is recorded and does not stop later

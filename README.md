@@ -5,6 +5,9 @@ MyFitnessPal og Google Health. Det kan bruges lokalt med SQLite eller køre
 permanent på en NAS med Docker Compose, scheduler og PostgreSQL. Hver
 integration har én vej og ét ansvar.
 
+Det indbyggede read-only dashboard samler daglig energi, skridt, træning,
+kropsmålinger, måltider og synkroniseringsstatus i browseren.
+
 ```text
 Intervals.icu GET  → raw_intervals → Google Health POST
 MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
@@ -34,6 +37,7 @@ uv run kaloriekassen withings --days 30
 uv run kaloriekassen withings-auth
 uv run kaloriekassen status
 uv run kaloriekassen scheduler
+uv run uvicorn kaloriekassen.web.app:app --host 127.0.0.1 --port 8088
 ```
 
 `status` viser den seneste kørsel for hvert sync-job, antal hentede og gemte
@@ -50,6 +54,16 @@ langtidkørende scheduler og PostgreSQL. Start det fra projektmappen på NAS'en:
 docker compose up -d --build
 docker compose logs -f scheduler
 ```
+
+Dashboardet kører som den separate `web`-service. På NAS'en sættes
+`WEB_BIND_ADDRESS` til NAS'ens LAN-adresse og `WEB_PORT` til en ledig port, fx
+`8088`. Det kan derefter åbnes på `http://192.168.1.11:8088`. Webservicen og
+scheduleren forbinder begge internt til PostgreSQL på `db:5432`; den eventuelle
+host-port til pgAdmin anvendes ikke mellem containere.
+
+Dashboardet har kun GET-endpoints og ændrer ikke data. Det bør kun bindes til
+det private LAN og må ikke publiceres direkte på internettet uden et separat
+autentificeringslag.
 
 Scheduler-containeren venter på PostgreSQLs healthcheck, kører alle jobs én
 gang ved opstart og gentager dem derefter uden overlap. Intervallerne styres i

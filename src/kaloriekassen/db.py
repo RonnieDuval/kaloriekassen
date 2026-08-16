@@ -177,6 +177,8 @@ LEFT JOIN body_measurements b ON b.measurement_id = (
 """
 
 POSTGRES_SCHEMA = SQLITE_SCHEMA.replace(
+    "CREATE VIEW IF NOT EXISTS", "CREATE OR REPLACE VIEW"
+).replace(
     "substr(started_at, 1, 10)", "substring(started_at from 1 for 10)"
 )
 

@@ -1,6 +1,7 @@
 """Map Intervals.icu activities to Google Health exercise records."""
 import datetime as dt
 import logging
+import math
 import os
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -131,6 +132,13 @@ def map_single_activity_to_google_exercise(activity: dict[str, Any]) -> dict[str
         exercise["metricsSummary"]["elevationGainMillimeters"] = int(
             elevation_meters * 1000
         )
+    average_heart_rate = activity.get("average_heartrate")
+    if average_heart_rate is not None:
+        beats_per_minute = float(average_heart_rate)
+        if math.isfinite(beats_per_minute) and beats_per_minute > 0:
+            exercise["metricsSummary"]["averageHeartRateBeatsPerMinute"] = str(
+                round(beats_per_minute)
+            )
     if elapsed_seconds:
         exercise["activeDuration"] = f"{elapsed_seconds}s"
 

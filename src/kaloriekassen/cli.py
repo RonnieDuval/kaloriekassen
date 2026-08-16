@@ -55,6 +55,16 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                     replicated,
                 )
 
+            case "google-health-heart-rate-backfill":
+                from kaloriekassen.google_health.heart_rate_backfill import (
+                    backfill_average_heart_rate,
+                )
+                updated = backfill_average_heart_rate(days)
+                logger.info(
+                    "Google Health: updated %d exercises with average heart rate.",
+                    updated,
+                )
+
             case "withings-auth":
                 from kaloriekassen.oauth_upload import upload_oauth_artifacts
                 from kaloriekassen.withings.auth import (
@@ -100,6 +110,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "google-health-read",
             "google-health-daily",
             "google-health-auth",
+            "google-health-heart-rate-backfill",
             "withings-auth",
             "withings",
             "status",

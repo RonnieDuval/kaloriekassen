@@ -14,6 +14,35 @@ class GoogleHealthUploadError(Exception):
     pass
 
 
+def patch_exercise_record(
+    access_token: str,
+    google_health_id: str,
+    data_point: Dict[str, Any],
+    timeout: int = 30,
+) -> None:
+    """Replace an existing exercise data point without creating a duplicate."""
+    if not google_health_id.startswith("users/") or (
+        "/dataTypes/exercise/dataPoints/" not in google_health_id
+    ):
+        raise ValueError("Invalid Google Health exercise data point name")
+
+    payload = {**data_point, "name": google_health_id}
+    response = requests.patch(
+        f"https://health.googleapis.com/v4/{google_health_id}",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    if response.status_code != 200:
+        raise GoogleHealthUploadError(
+            f"Exercise update failed ({response.status_code}): "
+            f"{extract_error_message(response)}"
+        )
+
+
 def upload_exercise_records(
     access_token: str,
     exercise_data_points: List[Dict[str, Any]],

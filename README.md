@@ -28,6 +28,7 @@ uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
 uv run kaloriekassen google-health-read --days 3
 uv run kaloriekassen google-health-daily --days 90
+uv run kaloriekassen google-health-heart-rate-backfill --days 730
 uv run kaloriekassen google-health-auth
 uv run kaloriekassen withings --days 30
 uv run kaloriekassen withings-auth
@@ -166,6 +167,10 @@ udløber, skal headeren kopieres igen efter manuelt login.
 Når `intervals` og `google-health-export` angives sammen, hentes Intervals-data
 først, hvorefter endnu ikke eksporterede aktiviteter sendes til Google Health.
 Scheduleren bevarer samme rækkefølge.
+Nye træninger får Intervals-feltet `average_heartrate` med som
+`averageHeartRateBeatsPerMinute` i Google Health. Den eksplicitte
+`google-health-heart-rate-backfill`-kommando opdaterer allerede eksporterede
+træninger via deres eksisterende Google-ID og opretter derfor ikke dubletter.
 `google-health-read` er en separat, read-only replika-kørsel. `--days` filtrerer
 Google Health allerede ved API-kaldet, så en almindelig 3-dages sync ikke
 genhenter hele træningshistorikken. Pagination gennemløber kun siderne inden

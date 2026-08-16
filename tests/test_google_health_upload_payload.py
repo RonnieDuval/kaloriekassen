@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 from kaloriekassen.google_health.client import (
     GOOGLE_HEALTH_EXERCISE_ENDPOINT,
+    patch_exercise_record,
     upload_exercise_records,
 )
 from kaloriekassen.google_health.mapper import (
@@ -20,6 +21,7 @@ def test_mapped_activity_is_sent_unchanged_to_google_health_api():
         "calories": 500,
         "distance": 20_000,
         "total_elevation_gain": 125,
+        "average_heartrate": 164,
     }
     expected_payload = {
         "exercise": {
@@ -34,6 +36,7 @@ def test_mapped_activity_is_sent_unchanged_to_google_health_api():
                 "caloriesKcal": 500.0,
                 "distanceMillimeters": 20_000_000,
                 "elevationGainMillimeters": 125_000,
+                "averageHeartRateBeatsPerMinute": "164",
             },
             "displayName": "BIKING: 20.0km",
             "activeDuration": "3600s",
@@ -71,3 +74,30 @@ def test_mapped_activity_is_sent_unchanged_to_google_health_api():
         "failed": [],
         "total": 1,
     }
+
+
+def test_patch_updates_existing_exercise_without_creating_a_new_one():
+    google_id = "users/1/dataTypes/exercise/dataPoints/1234"
+    data_point = {
+        "exercise": {
+            "metricsSummary": {"averageHeartRateBeatsPerMinute": "164"}
+        },
+        "dataSource": {"recordingMethod": "ACTIVELY_MEASURED"},
+    }
+    response = Mock(status_code=200)
+
+    with patch(
+        "kaloriekassen.google_health.client.requests.patch",
+        return_value=response,
+    ) as request_patch:
+        patch_exercise_record("access-token", google_id, data_point)
+
+    request_patch.assert_called_once_with(
+        f"https://health.googleapis.com/v4/{google_id}",
+        headers={
+            "Authorization": "Bearer access-token",
+            "Content-Type": "application/json",
+        },
+        json={**data_point, "name": google_id},
+        timeout=30,
+    )

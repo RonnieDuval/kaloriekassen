@@ -12,6 +12,7 @@ def test_maps_raw_intervals_activity_to_google_exercise():
             "calories": 500,
             "distance": 20_000,
             "total_elevation_gain": 125,
+            "average_heartrate": 164.4,
         }
     )
 
@@ -27,6 +28,7 @@ def test_maps_raw_intervals_activity_to_google_exercise():
         "caloriesKcal": 500.0,
         "distanceMillimeters": 20_000_000,
         "elevationGainMillimeters": 125_000,
+        "averageHeartRateBeatsPerMinute": "164",
     }
     assert exercise["activeDuration"] == "3600s"
 

@@ -1,5 +1,6 @@
 import logging
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from kaloriekassen import cli
@@ -77,3 +78,35 @@ def test_withings_receives_days(monkeypatch, caplog):
 
     assert calls == [730]
     assert "Withings: stored 2 measurement groups." in caplog.messages
+
+
+def test_withings_auth_uploads_client_and_token_after_oauth(monkeypatch):
+    calls = []
+    client_path = Path("secrets/withings-client.json")
+    token_path = Path("secrets/withings-token.json")
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.setup",
+        SimpleNamespace(run_oauth_flow=lambda: calls.append("oauth")),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.auth",
+        SimpleNamespace(
+            _client_secrets_path=lambda: client_path,
+            _token_store_path=lambda: token_path,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.oauth_upload",
+        SimpleNamespace(
+            upload_oauth_artifacts=lambda paths, remove_after_upload: calls.append(
+                (paths, remove_after_upload)
+            )
+        ),
+    )
+
+    cli.run_jobs(["withings-auth"], days=7)
+
+    assert calls == ["oauth", ([client_path, token_path], [token_path])]

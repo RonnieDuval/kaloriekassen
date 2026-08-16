@@ -1,24 +1,42 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-kaloriekassen}
       POSTGRES_USER: ${DB_USER:-kalorie}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-kalorie}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD skal sættes i .env}
+      TZ: ${SCHEDULER_TIMEZONE:-Europe/Copenhagen}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  sync:
+  scheduler:
     build: .
+    restart: unless-stopped
+    init: true
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file: .env
     environment:
+      DB_TYPE: postgres
       DB_HOST: db
-    command: ["kaloriekassen", "intervals", "google-health-export", "google-health-read"]
-    restart: "no"
+      GOOGLE_OAUTH_INTERACTIVE: "false"
+      GOOGLE_CLIENT_SECRETS_PATH: /app/secrets/google_api_client_secrets.json
+      GOOGLE_TOKEN_STORE_PATH: /app/secrets/google_oauth_token.json
+      WITHINGS_CLIENT_SECRETS_PATH: /app/secrets/withings_api_client.json
+      WITHINGS_TOKEN_STORE_PATH: /app/secrets/withings_oauth_token.json
+      OAUTH_UPLOAD_TO_NAS: "false"
+      TZ: ${SCHEDULER_TIMEZONE:-Europe/Copenhagen}
+    volumes:
+      - ${SECRETS_DIR:-./secrets}:/app/secrets
+    command: ["kaloriekassen", "scheduler"]
+    stop_grace_period: 30s
 
 volumes:
   postgres_data:

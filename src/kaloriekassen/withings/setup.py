@@ -8,7 +8,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from kaloriekassen.withings.auth import exchange_authorization_code, load_client_secrets
+from kaloriekassen.withings.auth import (
+    exchange_authorization_code,
+    load_client_secrets,
+)
 
 
 AUTHORIZE_URL = "https://account.withings.com/oauth2_user/authorize2"

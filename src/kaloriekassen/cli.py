@@ -3,6 +3,8 @@ import argparse
 import logging
 from collections.abc import Sequence
 
+from dotenv import load_dotenv
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +29,17 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                 logger.info("Google Health: processed %d unexported activities.", attempted)
 
             case "google-health-auth":
+                from kaloriekassen.google_health.auth import (
+                    _client_secrets_path,
+                    _token_store_path,
+                )
                 from kaloriekassen.google_health.setup import run_oauth_flow
+                from kaloriekassen.oauth_upload import upload_oauth_artifacts
                 run_oauth_flow()
+                upload_oauth_artifacts(
+                    [_client_secrets_path(), _token_store_path()],
+                    remove_after_upload=[_token_store_path()],
+                )
                 logger.info("Google Health: OAuth completed.")
 
             case "google-health-read":
@@ -45,8 +56,17 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                 )
 
             case "withings-auth":
+                from kaloriekassen.oauth_upload import upload_oauth_artifacts
+                from kaloriekassen.withings.auth import (
+                    _client_secrets_path,
+                    _token_store_path,
+                )
                 from kaloriekassen.withings.setup import run_oauth_flow
                 run_oauth_flow()
+                upload_oauth_artifacts(
+                    [_client_secrets_path(), _token_store_path()],
+                    remove_after_upload=[_token_store_path()],
+                )
                 logger.info("Withings: OAuth completed.")
 
             case "withings":
@@ -58,12 +78,17 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                 from kaloriekassen.sync_tracking import format_status_report
                 print(format_status_report())
 
+            case "scheduler":
+                from kaloriekassen.scheduler import run_forever
+                run_forever(fallback_days=days)
+
             case _:
                 # Wildcard: fanger alt, der ikke matchede de andre cases
                 raise ValueError(f"Ukendt job modtaget: {job}")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    load_dotenv()
     parser = argparse.ArgumentParser(prog="kaloriekassen")
     parser.add_argument(
         "jobs",
@@ -78,6 +103,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "withings-auth",
             "withings",
             "status",
+            "scheduler",
         ],
     )
     parser.add_argument("--days", type=int, default=7)

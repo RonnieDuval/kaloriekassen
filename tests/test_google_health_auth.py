@@ -4,7 +4,10 @@ from unittest.mock import Mock, patch
 import pytest
 from google.auth.exceptions import RefreshError
 
-from kaloriekassen.google_health.auth import get_credentials
+from kaloriekassen.google_health.auth import (
+    GoogleOAuthReauthorizationRequired,
+    get_credentials,
+)
 from kaloriekassen.google_health.setup import SCOPES, run_oauth_flow
 
 
@@ -43,6 +46,28 @@ def test_get_credentials_recovers_from_rejected_refresh_token(tmp_path, monkeypa
     oauth_flow.assert_called_once_with()
     assert refresh.call_count == 2
     assert credentials.refresh_token == "replacement"
+
+
+def test_get_credentials_does_not_open_browser_in_headless_mode(tmp_path, monkeypatch):
+    token_path = tmp_path / "token.json"
+    client_path = tmp_path / "client.json"
+    token_path.write_text(json.dumps({"refresh_token": "expired"}))
+    write_client_secrets(client_path)
+    monkeypatch.setenv("GOOGLE_TOKEN_STORE_PATH", str(token_path))
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRETS_PATH", str(client_path))
+    monkeypatch.setenv("GOOGLE_OAUTH_INTERACTIVE", "false")
+
+    with patch(
+        "kaloriekassen.google_health.auth.Credentials.refresh",
+        side_effect=RefreshError("invalid_grant"),
+    ), patch("kaloriekassen.google_health.setup.run_oauth_flow") as oauth_flow:
+        with pytest.raises(
+            GoogleOAuthReauthorizationRequired,
+            match="computer with a browser",
+        ):
+            get_credentials()
+
+    oauth_flow.assert_not_called()
 
 
 def test_run_oauth_flow_persists_refresh_token(tmp_path, monkeypatch):

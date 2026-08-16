@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-kaloriekassen}
       POSTGRES_USER: ${DB_USER:-kalorie}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-kalorie}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD skal sættes i .env}
       TZ: ${SCHEDULER_TIMEZONE:-Europe/Copenhagen}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
@@ -27,9 +27,14 @@ services:
       DB_TYPE: postgres
       DB_HOST: db
       GOOGLE_OAUTH_INTERACTIVE: "false"
+      GOOGLE_CLIENT_SECRETS_PATH: /app/secrets/google_api_client_secrets.json
+      GOOGLE_TOKEN_STORE_PATH: /app/secrets/google_oauth_token.json
+      WITHINGS_CLIENT_SECRETS_PATH: /app/secrets/withings_api_client.json
+      WITHINGS_TOKEN_STORE_PATH: /app/secrets/withings_oauth_token.json
+      OAUTH_UPLOAD_TO_NAS: "false"
       TZ: ${SCHEDULER_TIMEZONE:-Europe/Copenhagen}
     volumes:
-      - ./secrets:/app/secrets
+      - ${SECRETS_DIR:-./secrets}:/app/secrets
     command: ["kaloriekassen", "scheduler"]
     stop_grace_period: 30s
 

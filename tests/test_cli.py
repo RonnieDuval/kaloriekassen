@@ -1,5 +1,6 @@
 import logging
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from kaloriekassen import cli
@@ -44,3 +45,68 @@ def test_status_reports_when_no_sync_runs_exist(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == (
         "Der er endnu ikke registreret nogen sync-kørsler."
     )
+
+
+def test_google_health_daily_receives_days(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.google_health.daily_replication",
+        SimpleNamespace(replicate_daily=lambda days: calls.append(days) or 7),
+    )
+
+    with caplog.at_level(logging.INFO):
+        cli.run_jobs(["google-health-daily"], days=14)
+
+    assert calls == [14]
+    assert (
+        "Google Health: stored 7 completed daily activity summaries."
+        in caplog.messages
+    )
+
+
+def test_withings_receives_days(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.sync",
+        SimpleNamespace(ingest=lambda days: calls.append(days) or 2),
+    )
+
+    with caplog.at_level(logging.INFO):
+        cli.run_jobs(["withings"], days=730)
+
+    assert calls == [730]
+    assert "Withings: stored 2 measurement groups." in caplog.messages
+
+
+def test_withings_auth_uploads_client_and_token_after_oauth(monkeypatch):
+    calls = []
+    client_path = Path("secrets/withings-client.json")
+    token_path = Path("secrets/withings-token.json")
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.setup",
+        SimpleNamespace(run_oauth_flow=lambda: calls.append("oauth")),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.withings.auth",
+        SimpleNamespace(
+            _client_secrets_path=lambda: client_path,
+            _token_store_path=lambda: token_path,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.oauth_upload",
+        SimpleNamespace(
+            upload_oauth_artifacts=lambda paths, remove_after_upload: calls.append(
+                (paths, remove_after_upload)
+            )
+        ),
+    )
+
+    cli.run_jobs(["withings-auth"], days=7)
+
+    assert calls == ["oauth", ([client_path, token_path], [token_path])]

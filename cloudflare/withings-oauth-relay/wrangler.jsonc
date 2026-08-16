@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kaloriekassen-withings-oauth",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-16",
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  }
+}

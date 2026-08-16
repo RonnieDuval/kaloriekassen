@@ -35,8 +35,10 @@ def test_ingest_stores_food_entries_and_exposes_aggregated_views(tmp_path, monke
         daily_total = connection.execute(
             "SELECT calories_in, carbs_g, fat_g, sugar_g FROM daily_nutrition"
         ).fetchone()
-        daily_balance = connection.execute(
-            "SELECT calories_in, calories_out, net_balance FROM daily_balance"
+        daily_energy = connection.execute(
+            """SELECT calories_in, exercise_energy_kcal,
+                      estimated_energy_balance_kcal, data_completeness
+               FROM daily_energy_summary"""
         ).fetchone()
         raw_meals = json.loads(connection.execute("SELECT meals_detail FROM raw_mfp").fetchone()[0])
 
@@ -46,7 +48,7 @@ def test_ingest_stores_food_entries_and_exposes_aggregated_views(tmp_path, monke
     ]
     assert meal_total == (2, 350.0, 15.0, 100.0)
     assert daily_total == (350.0, 52.0, 9.0, 12.0)
-    assert daily_balance == (350.0, 0, 350.0)
+    assert daily_energy == (350.0, 0, None, "missing_expenditure")
     assert raw_meals["Breakfast"][0]["name"] == "Oatmeal"
 
 

@@ -48,11 +48,25 @@ def _run_myfitnesspal_sync(days: int) -> None:
     logger.info("MyFitnessPal scheduler: stored %d diary days.", stored)
 
 
-def _run_google_health_read() -> None:
+def _run_google_health_read(days: int) -> None:
     from kaloriekassen.google_health.replication import replicate
 
-    stored = replicate()
+    stored = replicate(days)
     logger.info("Google Health scheduler: replicated %d records.", stored)
+
+
+def _run_google_health_daily(days: int) -> None:
+    from kaloriekassen.google_health.daily_replication import replicate_daily
+
+    stored = replicate_daily(days)
+    logger.info("Google Health scheduler: stored %d daily summaries.", stored)
+
+
+def _run_withings_sync(days: int) -> None:
+    from kaloriekassen.withings.sync import ingest
+
+    stored = ingest(days)
+    logger.info("Withings scheduler: stored %d measurement groups.", stored)
 
 
 def build_schedule(fallback_days: int = 7) -> list[ScheduledJob]:
@@ -60,6 +74,8 @@ def build_schedule(fallback_days: int = 7) -> list[ScheduledJob]:
     activity_minutes = _positive_int_env("INTERVALS_SYNC_MINUTES", 30)
     mfp_hours = _positive_int_env("MFP_SYNC_HOURS", 3)
     google_read_hours = _positive_int_env("GOOGLE_HEALTH_READ_HOURS", 6)
+    google_daily_hours = _positive_int_env("GOOGLE_HEALTH_DAILY_HOURS", 6)
+    withings_hours = _positive_int_env("WITHINGS_SYNC_HOURS", 6)
     return [
         ScheduledJob(
             "intervals-and-google-health-export",
@@ -74,7 +90,17 @@ def build_schedule(fallback_days: int = 7) -> list[ScheduledJob]:
         ScheduledJob(
             "google-health-read",
             google_read_hours * 3600,
-            _run_google_health_read,
+            lambda: _run_google_health_read(days),
+        ),
+        ScheduledJob(
+            "google-health-daily",
+            google_daily_hours * 3600,
+            lambda: _run_google_health_daily(days),
+        ),
+        ScheduledJob(
+            "withings",
+            withings_hours * 3600,
+            lambda: _run_withings_sync(days),
         ),
     ]
 

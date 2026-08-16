@@ -156,3 +156,28 @@ def test_completed_exports_survive_an_interrupted_batch(tmp_path, monkeypatch):
         ).fetchone()
     assert exported == [("newer", "google/newer", "sent")]
     assert sync_run == ("partial", 2, 1, "KeyboardInterrupt")
+
+
+def test_empty_export_finishes_without_nested_sqlite_writer(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_TYPE", "sqlite")
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "empty-export.db"))
+
+    def credentials_must_not_be_needed():
+        raise AssertionError("No Google credentials should be loaded for an empty export")
+
+    monkeypatch.setattr(
+        export_module,
+        "get_credentials",
+        credentials_must_not_be_needed,
+    )
+
+    assert export_module.export(3) == 0
+
+    with get_db_connection() as connection:
+        sync_run = execute(
+            connection,
+            """SELECT status, fetched_count, stored_count, error_type
+               FROM sync_runs WHERE job = 'google-health-export'""",
+        ).fetchone()
+
+    assert sync_run == ("success", 0, 0, None)

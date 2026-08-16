@@ -24,6 +24,8 @@ def test_build_schedule_uses_configured_intervals(monkeypatch):
     monkeypatch.setenv("INTERVALS_SYNC_MINUTES", "15")
     monkeypatch.setenv("MFP_SYNC_HOURS", "4")
     monkeypatch.setenv("GOOGLE_HEALTH_READ_HOURS", "8")
+    monkeypatch.setenv("GOOGLE_HEALTH_DAILY_HOURS", "9")
+    monkeypatch.setenv("WITHINGS_SYNC_HOURS", "10")
 
     jobs = scheduler.build_schedule()
 
@@ -31,6 +33,8 @@ def test_build_schedule_uses_configured_intervals(monkeypatch):
         ("intervals-and-google-health-export", 15 * 60),
         ("myfitnesspal", 4 * 3600),
         ("google-health-read", 8 * 3600),
+        ("google-health-daily", 9 * 3600),
+        ("withings", 10 * 3600),
     ]
 
 

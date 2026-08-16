@@ -9,6 +9,8 @@ integration har én vej og ét ansvar.
 Intervals.icu GET  → raw_intervals → Google Health POST
 MyFitnessPal GET   → raw_mfp → nutrition_entries → analytical views
 Google Health GET  → raw_google_health_exercises
+Google Health rollup → google_health_daily_activity → daily_energy_summary
+Withings GET       → body_measurements → daily_energy_summary
 ```
 
 `raw_mfp` gemmer ét urørt dagbogspayload pr. dag. `nutrition_entries` indeholder
@@ -24,8 +26,11 @@ differenceanalyse og sendes aldrig til en anden tjeneste.
 uv run kaloriekassen intervals google-health-export --days 7
 uv run kaloriekassen myfitnesspal --days 7
 uv run kaloriekassen google-health-export
-uv run kaloriekassen google-health-read
+uv run kaloriekassen google-health-read --days 3
+uv run kaloriekassen google-health-daily --days 90
 uv run kaloriekassen google-health-auth
+uv run kaloriekassen withings --days 30
+uv run kaloriekassen withings-auth
 uv run kaloriekassen status
 uv run kaloriekassen scheduler
 ```
@@ -57,22 +62,89 @@ MFP_SYNC_HOURS=3
 GOOGLE_HEALTH_READ_HOURS=6
 ```
 
-`secrets/` bind-mountes i containeren og skal indeholde både OAuth-klientfilen
-og refresh-tokenet. Mappen skal blive privat og må ikke committes.
+NAS'ens secrets-mappe bind-mountes som `/app/secrets` i containeren og skal
+indeholde både OAuth-klientfiler og tokens. Den fysiske sti sættes med
+`SECRETS_DIR` i NAS'ens `.env`. Mappen skal blive privat og må ikke committes.
 
 Scheduler-containeren kører med `GOOGLE_OAUTH_INTERACTIVE=false`. Hvis Google
 afviser refresh-tokenet, registreres jobbet som fejlet i stedet for at forsøge
-at åbne en browser på NAS'en. Kør da følgende på en computer med browser og
-kopiér eller skriv tokenfilen til NAS'ens `secrets/`-mappe:
+at åbne en browser på NAS'en. OAuth køres på en computer med browser:
 
 ```bash
 uv run kaloriekassen google-health-auth
 ```
 
+Sæt `OAUTH_UPLOAD_TO_NAS=true`, `NAS_SSH_HOST`, `NAS_SSH_USER` og
+`NAS_SECRETS_DIR` i computerens lokale `.env`. Kommandoen uploader derefter
+både klient- og tokenfil atomisk gennem computerens eksisterende OpenSSH/SCP
+på port 22. Den lokale tokenfil slettes først, når upload og remote rename er
+lykkedes; ved fejl bevares den til recovery. SSH bruger normal nøgle og
+`known_hosts`, så password skal ikke ligge i `.env`. Der åbnes ingen OAuth-porte
+i Docker eller på NAS'en.
+
 Hvis OAuth-appens publishing status er `Testing`, udløber Google Health refresh
 tokens efter syv dage. En privat app kan sættes til `In production` uden at
 offentliggøre kildekode, NAS eller sundhedsdata; det fjerner testtilstandens
 syv-dagesudløb. Se [Googles officielle vejledning](https://developers.google.com/health/setup).
+
+`google-health-daily` henter afsluttede kalenderdage med skridt, aktiv energi og
+Google Healths samlede kalorieforbrug. API-kaldene deles automatisk i perioder,
+der overholder Googles 14-dages grænse for energidata.
+
+## Daglig energimodel
+
+`daily_energy_summary` erstatter det tidligere misvisende `daily_balance`.
+Google Healths `total-calories` bruges som estimeret TDEE, fordi værdien allerede
+indeholder både basal- og aktivitetsforbrug. Træningskalorier fra Intervals og
+estimerede skridtkalorier vises som forklarende datapunkter, men lægges ikke oven
+i TDEE og bliver derfor ikke dobbeltregnet.
+
+Basalforbruget beregnes stabilt med Mifflin–St Jeor ud fra den seneste vægt og
+den lokale profil. Standardprofilen er 114 kg, 185 cm, mand og født 2. september
+1986. Det giver 2.106,25 kcal/dag frem til næste fødselsdag. Når Withings senere
+leverer en nyere vægt, overtager den automatisk standardvægten fra måledatoen.
+
+Viewet viser blandt andet kalorieindtag, afledt basalforbrug, skridt,
+træningskalorier, aktiv energi, TDEE, estimeret energibalance og
+datakomplethed. Skridtkalorier bruger samme højde og vægtgrundlag som BMR.
+
+`body_measurements` er den kanoniske destination for Withings-målinger. Den
+normaliserer vægt, fedtprocent, fedtmasse og fedtfri masse fra `getmeas`.
+
+### Withings OAuth og synkronisering
+
+Withings kræver en offentlig HTTPS redirect-URL. Den lille Cloudflare Worker i
+`cloudflare/withings-oauth-relay` opfylder kravet og videresender kun det
+kortlivede OAuth-svar til `http://localhost:8081/`. Den gemmer ingen data og
+indeholder ingen credentials. NAS'en er ikke offentligt tilgængelig og henter
+senere selv data direkte fra Withings.
+
+Proceduren er:
+
+1. Opret Worker'en i Cloudflare med koden fra
+   `cloudflare/withings-oauth-relay/src/index.js` og deploy den.
+2. Registrer dens præcise URL hos Withings, inklusive `/oauth/callback`, fx
+   `https://kaloriekassen-withings-oauth.<konto>.workers.dev/oauth/callback`.
+3. Opret `secrets/withings_api_client.json` med de værdier, Withings viser:
+
+   ```json
+   {
+     "client_id": "...",
+     "client_secret": "...",
+     "redirect_uri": "https://kaloriekassen-withings-oauth.<konto>.workers.dev/oauth/callback"
+   }
+   ```
+
+4. Kør `uv run kaloriekassen withings-auth` på den computer, hvor browseren
+   åbnes. Med NAS-upload aktiveret i `.env` sendes klient- og tokenfilen gennem
+   SSH port 22 direkte til NAS'ens secrets-mappe, hvorefter den lokale tokenfil
+   fjernes. NAS'en bliver dermed eneste ejer af det roterende refresh-token.
+5. Test med `uv run kaloriekassen withings --days 730`. Derefter er en daglig
+   kørsel med fx `--days 7` tilstrækkelig. Access-token fornyes automatisk, og
+   det nye refresh-token erstatter altid det gamle.
+
+Stierne kan ændres med `WITHINGS_CLIENT_SECRETS_PATH` og
+`WITHINGS_TOKEN_STORE_PATH`.
 
 ### MyFitnessPal
 
@@ -93,8 +165,11 @@ udløber, skal headeren kopieres igen efter manuelt login.
 
 Når `intervals` og `google-health-export` angives sammen, hentes Intervals-data
 først, hvorefter endnu ikke eksporterede aktiviteter sendes til Google Health.
-Scheduleren bevarer samme rækkefølge. `google-health-read` er en separat,
-read-only replika-kørsel med pagination gennem alle tilgængelige sider.
+Scheduleren bevarer samme rækkefølge.
+`google-health-read` er en separat, read-only replika-kørsel. `--days` filtrerer
+Google Health allerede ved API-kaldet, så en almindelig 3-dages sync ikke
+genhenter hele træningshistorikken. Pagination gennemløber kun siderne inden
+for den valgte periode.
 
 ### Google Health OAuth
 
@@ -114,8 +189,9 @@ Proceduren er:
 2. Download klientens JSON-fil og gem den som
    `secrets/google_api_client_secrets.json`.
 3. Kør `uv run kaloriekassen google-health-auth` og godkend de ønskede scopes i
-   browseren. Programmet gemmer refresh-tokenet i
-   `secrets/google_oauth_token.json`.
+   browseren. Uden NAS-upload gemmes refresh-tokenet lokalt. Med
+   `OAUTH_UPLOAD_TO_NAS=true` uploades klient- og tokenfil gennem SSH, og den
+   lokale tokenfil fjernes efter bekræftet upload.
 4. Ved normale kørsler bruger programmet refresh-tokenet til automatisk at
    hente kortlivede access-tokens. Browserflowet skal kun gentages, hvis tokenet
    bliver ugyldigt, klienten ændres, eller der tilføjes scopes.

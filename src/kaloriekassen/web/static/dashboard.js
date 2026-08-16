@@ -26,6 +26,13 @@ function decimal(value, suffix = "") {
   return value === null || value === undefined ? "—" : `${decimalFormat.format(value)}${suffix}`;
 }
 function civilDate(value) { return new Date(`${value}T12:00:00`); }
+function localToday() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 function formatDate(value, formatter = dateFormat) { return formatter.format(civilDate(value)); }
 function formatDateTime(value) {
   if (!value) return "—";
@@ -65,6 +72,8 @@ function showError(message) {
 function hideError() { el("error-banner").hidden = true; }
 
 function renderMetrics(day, measurement) {
+  const isCurrentDay = day?.date === localToday();
+  const missingGoogleDaily = day?.estimated_tdee_kcal == null;
   const balance = day?.estimated_energy_balance_kcal;
   const balanceElement = el("metric-balance");
   balanceElement.textContent = number(balance, " kcal");
@@ -73,9 +82,17 @@ function renderMetrics(day, measurement) {
 
   el("metric-intake").textContent = number(day?.calories_in, " kcal");
   el("metric-tdee").textContent = number(day?.estimated_tdee_kcal, " kcal");
+  el("metric-tdee-note").textContent = missingGoogleDaily
+    ? (isCurrentDay ? "Kommer efter næste afsluttede dagssynk" : "Google-dagssum mangler")
+    : "Google totalenergi";
   el("metric-bmr").textContent = number(day?.basal_energy_kcal, " kcal");
   el("metric-steps").textContent = number(day?.steps);
-  el("metric-step-energy").textContent = `${number(day?.step_energy_estimated_kcal, " kcal")} estimeret`;
+  el("metric-step-energy").textContent = day?.steps == null
+    ? (isCurrentDay ? "Kommer efter næste afsluttede dagssynk" : "Google-dagssum mangler")
+    : `${number(day.step_energy_estimated_kcal, " kcal")} estimeret`;
+  el("metric-balance-note").textContent = balance == null
+    ? (isCurrentDay ? "Beregnes, når dagens TDEE er klar" : "Kan ikke beregnes uden TDEE")
+    : "Indtag minus TDEE";
   el("metric-exercise").textContent = number(day?.exercise_energy_kcal, " kcal");
 
   const weight = day?.weight_kg ?? measurement?.weight_kg;
@@ -87,14 +104,22 @@ function renderMetrics(day, measurement) {
 
   if (day?.date) {
     el("selected-date-heading").textContent = formatDate(day.date, longDateFormat);
+    const dayState = el("day-state");
+    dayState.hidden = false;
+    dayState.className = `day-state ${day.data_completeness === "complete" ? "complete" : "partial"}`;
+    dayState.textContent = day.data_completeness === "complete"
+      ? "Komplet dag"
+      : (isCurrentDay ? "Dagen er i gang" : "Ufuldstændig dag");
     const completeness = {
       complete: "Kost og energiforbrug er komplette for dagen.",
       missing_intake: "Kalorieindtag mangler for dagen.",
       missing_expenditure: "Energiforbrug mangler for dagen.",
       missing_intake_and_expenditure: "Kost og energiforbrug mangler for dagen.",
     };
-    el("completeness-copy").textContent = completeness[day.data_completeness]
-      || "Samler kost, bevægelse, træning og kropsmålinger.";
+    el("completeness-copy").textContent = isCurrentDay && missingGoogleDaily
+      ? "Google leverer skridt og TDEE for afsluttede dage. Energibalancen kommer efter næste dagssynkronisering."
+      : (completeness[day.data_completeness]
+        || "Samler kost, bevægelse, træning og kropsmålinger.");
   }
 }
 
@@ -212,15 +237,26 @@ function renderActivities(activities) {
 }
 
 function renderSyncJobs(jobs) {
+  const metadata = {
+    intervals: ["Hvert 30. minut", "Træning og aktivitetskalorier"],
+    myfitnesspal: ["Hver 3. time", "Mad og kalorieindtag"],
+    "google-health-read": ["Hver 6. time", "Kopi af Google-træninger"],
+    "google-health-daily": ["Hver 6. time", "Skridt, aktiv energi og TDEE for afsluttede dage"],
+    withings: ["Hver 6. time", "Vægt og kropssammensætning"],
+    "google-health-export": ["Med Intervals hvert 30. minut", "Nye Intervals-træninger til Google"],
+    "google-health-heart-rate-backfill": ["Engangskørsel", "Historisk gennemsnitspuls"],
+  };
   const list = el("sync-list");
   list.replaceChildren();
   jobs.forEach((job) => {
+    const [cadence, contents] = metadata[job.job] || ["Efter konfiguration", job.source];
     const item = document.createElement("div");
     item.className = "stack-item";
     item.innerHTML = `
       <div><strong>${escapeText(job.job)}</strong>
-      <small>${escapeText(formatDateTime(job.completed_at))} · ${escapeText(number(job.stored_count))} gemt</small></div>
-      <span class="status-pill ${job.status === "success" ? "success" : "failed"}">${escapeText(job.status)}</span>`;
+      <small>${escapeText(cadence)} · ${escapeText(contents)}</small>
+      <small>Senest ${escapeText(formatDateTime(job.completed_at))} · ${escapeText(number(job.stored_count))} gemt</small></div>
+      <span class="status-pill ${job.status === "success" ? "success" : "failed"}">${job.status === "success" ? "OK" : "Fejl"}</span>`;
     list.append(item);
   });
 }
@@ -297,7 +333,7 @@ function renderDashboard(payload) {
   renderActivities(payload.activities);
   renderSyncJobs(payload.sync_jobs);
   el("updated-at").textContent = `Opdateret ${formatDateTime(payload.generated_at)}`;
-  setHealth("healthy", "Data online");
+  setHealth("healthy", "Synkronisering OK");
   if (latest?.date) selectDay(latest.date);
 }
 

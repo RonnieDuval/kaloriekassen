@@ -93,6 +93,9 @@ h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 10px; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1; letter-spacing: -0.055em; }
 h2 { margin-bottom: 0; font-size: 1.1rem; letter-spacing: -0.02em; }
 .hero-copy { margin-bottom: 0; color: var(--muted); max-width: 620px; }
+.day-state { display: inline-flex; margin: 10px 0 2px; padding: 5px 9px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em; }
+.day-state.complete { color: var(--green); background: var(--green-soft); }
+.day-state.partial { color: var(--amber); background: rgba(242, 183, 109, 0.1); }
 
 .range-switcher { display: flex; gap: 5px; padding: 5px; border: 1px solid var(--border); border-radius: 13px; background: rgba(8, 16, 15, 0.55); }
 .range-switcher button { border: 0; background: transparent; padding: 9px 13px; border-radius: 9px; color: var(--muted); cursor: pointer; font-size: 0.82rem; transition: 150ms ease; }
@@ -155,6 +158,7 @@ h2 { margin-bottom: 0; font-size: 1.1rem; letter-spacing: -0.02em; }
 .day-activity { margin-top: 18px; padding: 13px; border-radius: 12px; background: var(--surface-soft); font-size: 0.8rem; }
 
 .stack-list { display: grid; gap: 8px; }
+.sync-explainer { margin: -7px 0 15px; color: var(--muted); font-size: 0.75rem; line-height: 1.5; }
 .stack-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-soft); }
 .stack-item strong { display: block; font-size: 0.84rem; }
 .stack-item small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.72rem; }

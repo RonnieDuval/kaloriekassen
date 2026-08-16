@@ -66,10 +66,13 @@ def test_dashboard_page_and_static_assets_are_served():
     assert response.status_code == 200
     assert "Kaloriekassen" in response.text
     assert "Dagens overblik" in response.text
+    assert "Grøn betyder, at seneste kørsel lykkedes" in response.text
     assert stylesheet.status_code == 200
     assert "--green" in stylesheet.text
     assert script.status_code == 200
     assert "loadDashboard" in script.text
+    assert "Synkronisering OK" in script.text
+    assert "Google leverer skridt og TDEE for afsluttede dage" in script.text
 
 
 def test_dashboard_api_returns_derived_energy_data():

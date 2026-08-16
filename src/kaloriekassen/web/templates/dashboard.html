@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Kaloriekassen</title>
+    <link rel="icon" href="{{ url_for('static', path='/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v=1">
+    <script src="{{ url_for('static', path='/dashboard.js') }}?v=1" defer></script>
+  </head>
+  <body data-default-days="{{ default_days }}">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Kaloriekassen forside">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span>
+          <strong>Kaloriekassen</strong>
+          <small>Energi, aktivitet og udvikling</small>
+        </span>
+      </a>
+      <div class="topbar-meta">
+        <span class="health-indicator" id="health-indicator">
+          <span class="health-dot"></span>
+          <span id="health-text">Henter data</span>
+        </span>
+        <span class="updated-at" id="updated-at"></span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero-heading">
+        <div>
+          <p class="eyebrow">Dagens overblik</p>
+          <h1 id="selected-date-heading">Din energi i balance</h1>
+          <span class="day-state" id="day-state" hidden></span>
+          <p class="hero-copy" id="completeness-copy">
+            Samler kost, bevægelse, træning og kropsmålinger.
+          </p>
+        </div>
+        <div class="range-switcher" aria-label="Vælg periode">
+          <button type="button" data-days="7">7 dage</button>
+          <button type="button" data-days="30" class="active">30 dage</button>
+          <button type="button" data-days="90">90 dage</button>
+          <button type="button" data-days="365">1 år</button>
+        </div>
+      </section>
+
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+      <section class="metric-grid" aria-label="Nøgletal">
+        <article class="metric-card metric-primary">
+          <div class="metric-label">Energibalance</div>
+          <div class="metric-value" id="metric-balance">—</div>
+          <div class="metric-foot" id="metric-balance-note">Indtag minus TDEE</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">Kalorier ind</div>
+          <div class="metric-value" id="metric-intake">—</div>
+          <div class="metric-foot">Fra MyFitnessPal</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">TDEE</div>
+          <div class="metric-value" id="metric-tdee">—</div>
+          <div class="metric-foot" id="metric-tdee-note">Google totalenergi</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">Basalforbrug</div>
+          <div class="metric-value" id="metric-bmr">—</div>
+          <div class="metric-foot">Mifflin–St Jeor</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">Skridt</div>
+          <div class="metric-value" id="metric-steps">—</div>
+          <div class="metric-foot" id="metric-step-energy">— kcal estimeret</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">Træning</div>
+          <div class="metric-value" id="metric-exercise">—</div>
+          <div class="metric-foot">Intervals.icu</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">Vægt</div>
+          <div class="metric-value" id="metric-weight">—</div>
+          <div class="metric-foot" id="metric-body-fat">Seneste måling</div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid charts-grid">
+        <article class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Udvikling</p>
+              <h2>Energi pr. dag</h2>
+            </div>
+            <div class="chart-legend" aria-label="Signaturforklaring">
+              <span><i class="legend-dot intake"></i>Indtag</span>
+              <span><i class="legend-dot tdee"></i>TDEE</span>
+              <span><i class="legend-dot balance"></i>Balance</span>
+            </div>
+          </div>
+          <div class="chart" id="energy-chart" aria-label="Graf over energi"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Kropsdata</p>
+              <h2>Vægtudvikling</h2>
+            </div>
+          </div>
+          <div class="chart chart-compact" id="weight-chart" aria-label="Graf over vægt"></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid detail-grid">
+        <article class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Historik</p>
+              <h2>Seneste dage</h2>
+            </div>
+            <span class="panel-hint">Vælg en dag for detaljer</span>
+          </div>
+          <div class="table-wrap">
+            <table class="daily-table">
+              <thead>
+                <tr>
+                  <th>Dato</th>
+                  <th>Indtag</th>
+                  <th>TDEE</th>
+                  <th>Balance</th>
+                  <th>Skridt</th>
+                  <th>Vægt</th>
+                </tr>
+              </thead>
+              <tbody id="daily-table-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel day-panel" id="day-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Dagens detaljer</p>
+              <h2 id="day-panel-title">Vælg en dag</h2>
+            </div>
+          </div>
+          <div id="day-detail" class="day-detail empty-state">
+            Klik på en række for at se måltider og træning.
+          </div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid lower-grid">
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Intervals.icu</p>
+              <h2>Seneste aktiviteter</h2>
+            </div>
+          </div>
+          <div id="activity-list" class="stack-list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Datakilder</p>
+              <h2>Synkronisering</h2>
+            </div>
+          </div>
+          <p class="sync-explainer">
+            Grøn betyder, at seneste kørsel lykkedes — ikke at alle felter findes for den valgte dag.
+          </p>
+          <div id="sync-list" class="stack-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      <span>Privat dashboard · read-only</span>
+      <a href="/api/docs">API</a>
+    </footer>
+  </body>
+</html>

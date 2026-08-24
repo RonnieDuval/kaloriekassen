@@ -97,8 +97,9 @@ Sæt `OAUTH_UPLOAD_TO_NAS=true`, `NAS_SSH_HOST`, `NAS_SSH_USER` og
 både klient- og tokenfil atomisk gennem computerens eksisterende OpenSSH/SCP
 på port 22. Den lokale tokenfil slettes først, når upload og remote rename er
 lykkedes; ved fejl bevares den til recovery. SSH bruger normal nøgle og
-`known_hosts`, så password skal ikke ligge i `.env`. Der åbnes ingen OAuth-porte
-i Docker eller på NAS'en.
+`known_hosts`. Sæt `NAS_SSH_PASSWORD` i computerens lokale `.env`, hvis uploaden
+skal logge ind uden prompt; hvis feltet er tomt, bruges computerens normale
+SSH-nøgle eller agent. Der åbnes ingen OAuth-porte i Docker eller på NAS'en.
 
 Hvis OAuth-appens publishing status er `Testing`, udløber Google Health refresh
 tokens efter syv dage. En privat app kan sættes til `In production` uden at

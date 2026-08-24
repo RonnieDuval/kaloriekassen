@@ -18,7 +18,9 @@ def test_upload_is_disabled_by_default(tmp_path, monkeypatch):
     token.write_text("{}")
     calls = []
     monkeypatch.delenv("OAUTH_UPLOAD_TO_NAS", raising=False)
-    monkeypatch.setattr(oauth_upload.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(
+        oauth_upload.subprocess, "run", lambda *args, **kwargs: calls.append(args)
+    )
 
     assert oauth_upload.upload_oauth_artifacts([token]) is False
     assert calls == []
@@ -37,7 +39,9 @@ def test_upload_uses_scp_and_atomic_remote_rename(tmp_path, monkeypatch):
         "run",
         lambda command, check: calls.append((command, check)),
     )
-    monkeypatch.setattr(oauth_upload.uuid, "uuid4", lambda: type("U", (), {"hex": "abc"})())
+    monkeypatch.setattr(
+        oauth_upload.uuid, "uuid4", lambda: type("U", (), {"hex": "abc"})()
+    )
 
     uploaded = oauth_upload.upload_oauth_artifacts(
         [client, token],
@@ -72,3 +76,36 @@ def test_failed_upload_keeps_local_token(tmp_path, monkeypatch):
         )
 
     assert token.exists()
+
+
+def test_password_upload_is_noninteractive(tmp_path, monkeypatch):
+    _enable_upload(monkeypatch)
+    monkeypatch.setenv("NAS_SSH_PASSWORD", "hemmeligt")
+    token = tmp_path / "token.json"
+    token.write_text("token")
+    calls = []
+    monkeypatch.setattr(
+        oauth_upload,
+        "_upload_files_with_password",
+        lambda paths, target, port, remote_directory, password: calls.append(
+            (list(paths), target, port, remote_directory, password)
+        ),
+    )
+    monkeypatch.setattr(
+        oauth_upload.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("OpenSSH must not be used when a password is configured")
+        ),
+    )
+
+    assert oauth_upload.upload_oauth_artifacts([token]) is True
+    assert calls == [
+        (
+            [token],
+            "bruger@nas",
+            22,
+            "/volume1/docker/kaloriekassen/secrets",
+            "hemmeligt",
+        )
+    ]

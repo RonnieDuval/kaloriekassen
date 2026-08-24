@@ -8,6 +8,7 @@ __pycache__/
 .env.local
 ny.env
 docker.env
+*.env
 
 
 secrets/

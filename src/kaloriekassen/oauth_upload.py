@@ -9,7 +9,10 @@ import shlex
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
+
+if TYPE_CHECKING:
+    import paramiko
 
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,11 @@ def _identity_arguments() -> list[str]:
     return ["-i", identity_file] if identity_file else []
 
 
+def _password() -> str | None:
+    password = os.getenv("NAS_SSH_PASSWORD")
+    return password if password else None
+
+
 def _upload_file(path: Path, target: str, port: int, remote_directory: str) -> None:
     if not path.is_file():
         raise FileNotFoundError(f"OAuth artifact not found: {path}")
@@ -85,6 +93,65 @@ def _upload_file(path: Path, target: str, port: int, remote_directory: str) -> N
     )
 
 
+def _connect_with_password(
+    target: str, port: int, password: str
+) -> "paramiko.SSHClient":
+    import paramiko
+
+    user, host = target.split("@", maxsplit=1)
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    client.connect(
+        hostname=host,
+        port=port,
+        username=user,
+        password=password,
+        look_for_keys=False,
+        allow_agent=False,
+    )
+    return client
+
+
+def _upload_files_with_password(
+    paths: Iterable[Path],
+    target: str,
+    port: int,
+    remote_directory: str,
+    password: str,
+) -> None:
+    client = _connect_with_password(target, port, password)
+    try:
+        sftp = client.open_sftp()
+        try:
+            for path in paths:
+                if not path.is_file():
+                    raise FileNotFoundError(f"OAuth artifact not found: {path}")
+                if not _SSH_NAME.fullmatch(path.name):
+                    raise ValueError(
+                        f"OAuth artifact has an unsafe filename: {path.name}"
+                    )
+
+                temporary_name = f".{path.name}.{uuid.uuid4().hex}.tmp"
+                temporary_path = f"{remote_directory}/{temporary_name}"
+                final_path = f"{remote_directory}/{path.name}"
+                sftp.put(str(path), temporary_path)
+                sftp.chmod(temporary_path, 0o600)
+                _, stdout, stderr = client.exec_command(
+                    f"mv -f -- {shlex.quote(temporary_path)} {shlex.quote(final_path)}"
+                )
+                exit_status = stdout.channel.recv_exit_status()
+                if exit_status:
+                    error = stderr.read().decode("utf-8", errors="replace").strip()
+                    raise RuntimeError(
+                        f"Could not install OAuth artifact on NAS: {error}"
+                    )
+        finally:
+            sftp.close()
+    finally:
+        client.close()
+
+
 def upload_oauth_artifacts(
     paths: Iterable[Path],
     *,
@@ -100,8 +167,12 @@ def upload_oauth_artifacts(
 
     target, port, remote_directory = _ssh_settings()
     artifacts = [Path(path) for path in paths]
-    for artifact in artifacts:
-        _upload_file(artifact, target, port, remote_directory)
+    password = _password()
+    if password:
+        _upload_files_with_password(artifacts, target, port, remote_directory, password)
+    else:
+        for artifact in artifacts:
+            _upload_file(artifact, target, port, remote_directory)
 
     if _boolean_env("OAUTH_DELETE_LOCAL_TOKEN_AFTER_UPLOAD", default=True):
         for path in remove_after_upload:

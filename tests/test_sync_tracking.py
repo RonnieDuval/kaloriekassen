@@ -112,26 +112,22 @@ def test_intervals_marks_activity_and_rest_days(tmp_path, monkeypatch):
     ]
 
 
-def test_myfitnesspal_marks_empty_data_and_missing_days_partial(tmp_path, monkeypatch):
+def test_myfitnesspal_records_exact_range_with_empty_and_populated_days(
+    tmp_path, monkeypatch
+):
     _use_database(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        myfitnesspal_sync,
-        "requested_date_range",
-        lambda _days: (date(2026, 8, 13), date(2026, 8, 15)),
-    )
-    monkeypatch.setattr(
-        myfitnesspal_sync,
-        "hent_mfp_seneste_dage",
-        lambda _days: [
-            {"date": "2026-08-13", "meals": {}},
-            {
-                "date": "2026-08-14",
-                "meals": {"Breakfast": [{"name": "Oatmeal", "calories": 250}]},
-            },
-        ],
-    )
+    days = {
+        "2026-08-13": {"date": "2026-08-13", "meals": {}},
+        "2026-08-14": {
+            "date": "2026-08-14",
+            "meals": {"Breakfast": [{"name": "Oatmeal", "calories": 250}]},
+        },
+    }
+    monkeypatch.setattr(myfitnesspal_sync, "hent_mfp_dag", days.__getitem__)
 
-    assert myfitnesspal_sync.ingest(3) == 2
+    assert myfitnesspal_sync.ingest_range(
+        date(2026, 8, 13), date(2026, 8, 14)
+    ) == 2
 
     with get_db_connection() as connection:
         run_status = connection.execute(
@@ -140,11 +136,43 @@ def test_myfitnesspal_marks_empty_data_and_missing_days_partial(tmp_path, monkey
         coverage = connection.execute(
             "SELECT date, status, record_count FROM sync_coverage ORDER BY date"
         ).fetchall()
-    assert run_status == "partial"
+    assert run_status == "success"
     assert coverage == [
         ("2026-08-13", "complete_empty", 0),
         ("2026-08-14", "complete_data", 1),
-        ("2026-08-15", "failed", 0),
+    ]
+
+
+def test_myfitnesspal_preserves_completed_days_when_later_fetch_fails(
+    tmp_path, monkeypatch
+):
+    _use_database(monkeypatch, tmp_path)
+
+    def fetch(day):
+        if day == "2026-08-14":
+            raise RuntimeError("source unavailable")
+        return {"date": day, "meals": {}}
+
+    monkeypatch.setattr(myfitnesspal_sync, "hent_mfp_dag", fetch)
+
+    with pytest.raises(RuntimeError, match="source unavailable"):
+        myfitnesspal_sync.ingest_range(date(2026, 8, 13), date(2026, 8, 15))
+
+    with get_db_connection() as connection:
+        stored_days = connection.execute("SELECT date FROM raw_mfp ORDER BY date").fetchall()
+        run = connection.execute(
+            "SELECT status, fetched_count, stored_count FROM sync_runs"
+        ).fetchone()
+        coverage = connection.execute(
+            "SELECT date, status FROM sync_coverage ORDER BY date"
+        ).fetchall()
+
+    assert stored_days == [("2026-08-13",)]
+    assert run == ("partial", 1, 1)
+    assert coverage == [
+        ("2026-08-13", "complete_empty"),
+        ("2026-08-14", "failed"),
+        ("2026-08-15", "failed"),
     ]
 
 

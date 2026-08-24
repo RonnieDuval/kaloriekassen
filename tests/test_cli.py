@@ -1,9 +1,51 @@
 import logging
 import sys
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
 from kaloriekassen import cli
+
+
+def test_myfitnesspal_specific_dates_use_range_ingestion(monkeypatch):
+    calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        "kaloriekassen.myfitnesspal.sync",
+        SimpleNamespace(
+            ingest=lambda days: calls.append(("days", days)) or 1,
+            ingest_range=lambda start, end: calls.append((start, end)) or 2,
+        ),
+    )
+
+    cli.run_jobs(
+        ["myfitnesspal"],
+        days=7,
+        mfp_from=date(2026, 8, 1),
+        mfp_to=date(2026, 8, 10),
+    )
+
+    assert calls == [(date(2026, 8, 1), date(2026, 8, 10))]
+
+
+def test_myfitnesspal_cli_parses_specific_dates(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "run_jobs", lambda *args: calls.append(args))
+
+    cli.main(["myfitnesspal", "--from", "2026-08-01", "--to", "2026-08-10"])
+
+    assert calls == [
+        (["myfitnesspal"], 7, date(2026, 8, 1), date(2026, 8, 10))
+    ]
+
+
+def test_myfitnesspal_cli_rejects_incomplete_range():
+    try:
+        cli.main(["myfitnesspal", "--from", "2026-08-01"])
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        raise AssertionError("Expected argparse to reject an incomplete date range")
 
 
 def test_intervals_are_ingested_before_google_health_export(monkeypatch, caplog):

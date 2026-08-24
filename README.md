@@ -183,6 +183,16 @@ Derefter henter `uv run kaloriekassen myfitnesspal --days 7` diary-siderne med
 den eksisterende session uden at forsøge et automatiseret login. Når sessionen
 udløber, skal headeren kopieres igen efter manuelt login.
 
+En bestemt historisk periode kan backfilles med begge datoer inklusive:
+
+```powershell
+uv run kaloriekassen myfitnesspal --from 2026-08-01 --to 2026-08-10
+```
+
+`--from` og `--to` skal bruges sammen og kan ikke kombineres med `--days`.
+Hver diary-dag gemmes separat, så allerede gemte dage bevares, hvis en senere
+dag i intervallet fejler.
+
 Når `intervals` og `google-health-export` angives sammen, hentes Intervals-data
 først, hvorefter endnu ikke eksporterede aktiviteter sendes til Google Health.
 Scheduleren bevarer samme rækkefølge.

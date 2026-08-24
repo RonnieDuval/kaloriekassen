@@ -2,6 +2,7 @@
 import argparse
 import logging
 from collections.abc import Sequence
+from datetime import date
 
 from dotenv import load_dotenv
 
@@ -9,7 +10,12 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 
-def run_jobs(jobs: Sequence[str], days: int) -> None:
+def run_jobs(
+    jobs: Sequence[str],
+    days: int,
+    mfp_from: date | None = None,
+    mfp_to: date | None = None,
+) -> None:
     """Run jobs in the order provided and report their completed work."""
     for job in jobs:
         match job:
@@ -19,8 +25,12 @@ def run_jobs(jobs: Sequence[str], days: int) -> None:
                 logger.info("Intervals: stored %d activities from the last %d days.", stored, days)
 
             case "myfitnesspal":
-                from kaloriekassen.myfitnesspal.sync import ingest
-                stored = ingest(days)
+                from kaloriekassen.myfitnesspal.sync import ingest, ingest_range
+                stored = (
+                    ingest_range(mfp_from, mfp_to)
+                    if mfp_from is not None and mfp_to is not None
+                    else ingest(days)
+                )
                 logger.info("MyFitnessPal: stored %d diary days.", stored)
 
             case "google-health-export":
@@ -126,10 +136,33 @@ def main(argv: Sequence[str] | None = None) -> None:
             "scheduler",
         ],
     )
-    parser.add_argument("--days", type=int, default=7)
+    parser.add_argument("--days", type=int)
+    parser.add_argument(
+        "--from",
+        dest="mfp_from",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="First MyFitnessPal diary date to ingest (inclusive).",
+    )
+    parser.add_argument(
+        "--to",
+        dest="mfp_to",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="Last MyFitnessPal diary date to ingest (inclusive).",
+    )
     args = parser.parse_args(argv)
+    has_mfp_range = args.mfp_from is not None or args.mfp_to is not None
+    if has_mfp_range and (args.mfp_from is None or args.mfp_to is None):
+        parser.error("--from and --to must be provided together")
+    if has_mfp_range and args.jobs != ["myfitnesspal"]:
+        parser.error("--from and --to can only be used with the myfitnesspal job")
+    if has_mfp_range and args.days is not None:
+        parser.error("--days cannot be combined with --from and --to")
+    if has_mfp_range and args.mfp_from > args.mfp_to:
+        parser.error("--from must be on or before --to")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    run_jobs(args.jobs, args.days)
+    run_jobs(args.jobs, args.days if args.days is not None else 7, args.mfp_from, args.mfp_to)
 
 
 if __name__ == "__main__":
